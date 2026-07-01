@@ -1,0 +1,34 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1782820554127,
+      "tag": "0000_remarkable_oracle",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1782827900361,
+      "tag": "0001_aspiring_talkback",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782828748234,
+      "tag": "0002_wet_dagger",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1782830054774,
+      "tag": "0003_minor_scrambler",
+      "breakpoints": true
+    }
+  ]
+}

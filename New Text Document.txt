@@ -1,0 +1,133 @@
+How the FieldTrack project works
+FieldTrack has three main parts:
+Manager/Driver Browser
+        ↓
+React + Vite frontend (port 5173)
+        ↓ REST API
+Express backend (port 4000)
+        ↓
+PostgreSQL database
+
+Lead photos/selfies → backend/uploads/
+GPS updates → PostgreSQL every 30 seconds
+1. Frontend
+The frontend is a React application built with Vite.
+Manager interface: dashboard, drivers, assignments, tracking, leads, quality control, and reports.
+Driver interface: check-in, navigation, lead capture, and synchronization.
+During development, Vite forwards /api and /uploads requests to the backend on port 4000.
+Application routes are defined in [routes.tsx](C:/Users/shaik/Desktop/Tracker/src/app/routes.tsx).
+API requests are handled by [api.ts](C:/Users/shaik/Desktop/Tracker/src/app/lib/api.ts).
+2. Backend
+The backend is an Express and TypeScript application.
+It provides APIs for:
+Authentication
+Cities, zones, districts, and streets
+Driver management
+Assignments
+Driver check-in and check-out
+GPS tracking
+Lead submission
+Lead approval and rejection
+Quality control
+Reports and exports
+The backend starts from [index.ts](C:/Users/shaik/Desktop/Tracker/backend/src/index.ts).
+3. How login works
+The Manager enters an email and password; the Driver uses a phone number and password.
+The frontend sends the credentials to POST /api/v1/auth/login.
+The backend finds the user in PostgreSQL.
+The submitted password is compared with the stored bcrypt password hash.
+The backend returns a signed JWT access token.
+The frontend stores the token and basic user details in browser localStorage.
+Future API requests send:
+Authorization: Bearer <token>
+Protected routes check the user’s role:
+super_admin
+city_manager
+driver
+client
+
+Actual passwords are not stored directly in the database—only password hashes.
+How the data moves
+Manager assignment example
+Manager selects a driver, district, and streets.
+React sends the assignment to the Express API.
+The backend verifies the Manager’s token and permissions.
+The assignment is inserted into PostgreSQL.
+When the Driver opens Home or Navigate, the frontend requests today’s assignment.
+The backend reads the assignment and related street records from PostgreSQL.
+The Driver receives only the assigned work.
+Driver lead example
+Driver captures site details, GPS, and photos.
+The frontend creates a FormData upload.
+The lead is sent to POST /api/v1/leads.
+The backend creates the lead record in PostgreSQL.
+Images are saved under backend/uploads.
+Image URLs and metadata are stored in the lead_photos table.
+The Manager sees the new lead in the review queue.
+Approval or rejection updates the lead’s database status.
+Live tracking
+The Driver application reads the phone’s GPS position.
+It sends a tracking ping approximately every 30 seconds.
+Each ping is stored in driver_location_pings.
+The Manager tracking page refreshes approximately every 30 seconds.
+The backend also contains authenticated Socket.IO support, although the current frontend primarily uses REST polling.
+Where the data is stored
+PostgreSQL
+The project uses PostgreSQL with Drizzle ORM.
+Table	Stored information
+users	Managers, drivers, roles, city, contact information and password hashes
+cities	City names, coordinates and operational targets
+zones	Zones belonging to cities
+districts	District names, boundaries and coordinates
+streets	Streets and their coverage status
+driver_assignments	Driver-to-street assignments and progress
+driver_checkins	Selfie URL, GPS, odometer, fuel and check-in/out times
+leads	Construction-site details, GPS, status and review results
+lead_photos	Photo type, file URL, GPS, watermark and blur score
+driver_location_pings	Driver GPS history, speed, accuracy and battery
+activity_logs	Important user actions and audit information
+
+The runtime database definitions are in [backend/src/db/schema](C:/Users/shaik/Desktop/Tracker/backend/src/db/schema).
+Uploaded images
+Uploaded photos are currently stored on the backend’s local disk:
+C:\Users\shaik\Desktop\Tracker\backend\uploads
+PostgreSQL stores the image URL—not the image binary itself.
+For production, these files should be moved to persistent object storage such as AWS S3, Cloudflare R2, or Supabase Storage. Local cloud-server disks can be temporary.
+Browser storage
+The browser currently stores:
+JWT access token
+Logged-in user details
+These use localStorage keys such as:
+fieldtrack_token
+fieldtrack_user
+Important offline limitation
+The backend contains an offline synchronization endpoint, but the current frontend offline feature is not fully connected.
+At present:
+Save Draft displays a success message but does not persist the lead to IndexedDB or localStorage.
+The Offline Sync screen starts with an empty in-memory list.
+Refreshing or closing the application would lose an unsaved draft.
+Therefore, genuine offline lead storage and automatic synchronization still need implementation.
+How to run the project
+First-time database setup
+PostgreSQL must be running, and [backend/.env](C:/Users/shaik/Desktop/Tracker/backend/.env) must contain a valid:
+DATABASE_URL=postgresql://user:password@localhost:5432/fieldtrack
+JWT_SECRET=a-long-random-secret-of-at-least-32-characters
+PORT=4000
+FRONTEND_URL=http://localhost:5173
+BACKEND_URL=http://localhost:4000
+Then run:
+cd "C:\Users\shaik\Desktop\Tracker\backend"
+npm install
+npm run migrate
+npm run seed
+npm run dev
+The backend should become available at:
+http://localhost:4000
+http://localhost:4000/health
+In another PowerShell window:
+cd "C:\Users\shaik\Desktop\Tracker"
+npm install
+npm run dev
+The frontend should become available at:
+http://localhost:5173
+The database only needs to be migrated and seeded initially. On ordinary development days, start the backend and frontend with npm run dev.

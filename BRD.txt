@@ -1,0 +1,1295 @@
+# Business Requirements Document (BRD)
+## ConstructTrack - Multi-City Field Agent Construction Lead Generation System
+### Kingdom of Saudi Arabia (KSA)
+
+---
+
+```
+Document Title:    Business Requirements Document (BRD)
+Project Name:      ConstructTrack KSA
+Version:           2.0
+Date:              2025
+Status:            Draft
+Prepared For:      Development Team
+Country:           Kingdom of Saudi Arabia
+Classification:    Confidential
+```
+
+---
+
+# TABLE OF CONTENTS
+
+```
+1.  Executive Summary
+2.  Business Background
+3.  Business Objectives
+4.  Project Scope
+5.  Stakeholders
+6.  Business Requirements
+7.  Functional Requirements
+8.  Non-Functional Requirements
+9.  System Architecture Overview
+10. User Roles & Permissions
+11. Module Breakdown
+12. Data Requirements
+13. Integration Requirements
+14. Reporting Requirements
+15. Constraints & Assumptions
+16. Risks & Mitigation
+17. Success Criteria
+18. Timeline & Phases
+19. Appendix
+20. Glossary
+```
+
+---
+
+# SECTION 1 — EXECUTIVE SUMMARY
+
+---
+
+## 1.1 Project Overview
+
+```
+ConstructTrack KSA is a Multi-City Field Data Collection 
+and Lead Generation SaaS Web + Mobile Application designed 
+for operations across multiple cities in the 
+Kingdom of Saudi Arabia.
+
+The system enables MULTIPLE teams of field agents across 
+MULTIPLE cities, each equipped with vehicles, GPS tracking 
+devices, smartphones, and mobile internet SIM cards to 
+systematically survey every zone, district, and street 
+in their assigned city to identify and capture active 
+construction sites in early phases.
+
+The collected data is transformed into high-quality 
+construction leads that are delivered to clients in 
+real estate, construction, and related industries 
+across KSA.
+
+SCALE OF OPERATIONS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Cities Supported:     Multiple KSA Cities
+Drivers per City:     Unlimited (Scalable)
+Total System Drivers: Unlimited
+Cities at Launch:     Starting with Jeddah
+Expansion Ready:      Riyadh, Mecca, Madinah,
+                      Dammam, Khobar, Tabuk,
+                      Abha, Taif, Jizan & more
+```
+
+## 1.2 Problem Statement
+
+```
+CURRENT PROBLEMS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FIELD OPERATIONS PROBLEMS:
+❌ No system to track which streets drivers covered
+❌ No way to verify drivers actually visited areas
+❌ Cannot manage multiple cities simultaneously
+❌ Cannot scale driver teams across cities
+❌ No live visibility of driver locations
+❌ Duplicate coverage of same streets
+❌ Missed streets and entire districts
+❌ No cross-city performance comparison
+
+DATA COLLECTION PROBLEMS:
+❌ Data collected on paper or Google Forms
+❌ Photos not linked to GPS automatically
+❌ No structured lead format
+❌ Data inconsistency across cities
+❌ No central database for all KSA leads
+❌ Cannot filter leads by city or region
+
+MANAGEMENT PROBLEMS:
+❌ Cannot manage teams in different cities
+❌ No accountability per driver per city
+❌ No way to measure productivity by city
+❌ Cannot assign city managers
+❌ Manual reporting takes too long
+❌ Client delivery is unstructured
+
+BUSINESS GROWTH PROBLEMS:
+❌ Cannot onboard new cities quickly
+❌ Cannot add more drivers easily
+❌ No system to bill clients per city
+❌ Cannot track ROI per city operation
+```
+
+## 1.3 Proposed Solution
+
+```
+CONSTRUCTTRACK KSA SOLVES THIS BY:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+MULTI-CITY MANAGEMENT:
+✅ Add unlimited cities across KSA
+✅ Each city has its own zones/districts/streets
+✅ Separate driver teams per city
+✅ City-level managers with own dashboards
+✅ Cross-city reporting for Super Admin
+
+FIELD OPERATIONS:
+✅ Digital map of every city (zones/districts/streets)
+✅ Assign specific streets to each driver
+✅ Live GPS tracking of all drivers per city
+✅ Smart route planning per driver
+✅ Coverage progress map per city
+
+DATA COLLECTION:
+✅ Mobile app for easy lead submission
+✅ Auto GPS coordinates on every photo
+✅ Structured lead database per city
+✅ Centralized KSA-wide lead database
+✅ Photo watermarking with location + time
+
+BUSINESS OPERATIONS:
+✅ Export leads per city for clients
+✅ Performance reports per city/driver
+✅ Client portal per city
+✅ Scale to any new city within minutes
+✅ Complete audit trail of all activities
+```
+
+---
+
+# SECTION 2 — BUSINESS BACKGROUND
+
+---
+
+## 2.1 Company Context
+
+```
+TYPE OF BUSINESS:
+Construction Lead Generation Company
+Operating across Kingdom of Saudi Arabia
+
+CORE SERVICE:
+Identify newly started construction sites
+and sell those leads to clients in:
+
+┌─────────────────────────────────────────┐
+│ TARGET CLIENT INDUSTRIES                │
+├─────────────────────────────────────────┤
+│ • Construction Material Suppliers       │
+│ • Interior Design Companies             │
+│ • MEP Contractors                       │
+│ • Steel & Concrete Suppliers            │
+│ • Real Estate Developers                │
+│ • Construction Equipment Rental         │
+│ • Architecture & Engineering Firms      │
+│ • Paint & Finishing Companies           │
+│ • Electrical & Plumbing Suppliers       │
+│ • Glass & Aluminum Companies            │
+│ • Landscaping Companies                 │
+│ • Security System Providers             │
+└─────────────────────────────────────────┘
+
+OPERATIONAL STRUCTURE:
+┌─────────────────────────────────────────┐
+│ LEVEL 1: Super Admin (HQ)               │
+│ → Manages entire KSA operations         │
+│ → Sees all cities, all drivers          │
+│ → Full system access                    │
+├─────────────────────────────────────────┤
+│ LEVEL 2: City Manager                   │
+│ → Manages one specific city             │
+│ → Assigns drivers within city           │
+│ → Reviews leads for their city          │
+├─────────────────────────────────────────┤
+│ LEVEL 3: Field Supervisor               │
+│ → Manages group of drivers              │
+│ → Monitors field operations             │
+│ → Quality checks lead submissions       │
+├─────────────────────────────────────────┤
+│ LEVEL 4: Driver / Field Agent           │
+│ → Drives assigned streets               │
+│ → Submits construction leads            │
+│ → Reports daily activity                │
+└─────────────────────────────────────────┘
+```
+
+## 2.2 KSA Market Overview
+
+```
+KSA CONSTRUCTION MARKET:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Country:             Kingdom of Saudi Arabia
+Vision:              Saudi Vision 2030
+Construction Growth: One of highest globally
+GIGA Projects:       NEOM, Red Sea, Qiddiya,
+                     Diriyah, & more
+
+TARGET CITIES & SCALE:
+┌──────────────┬───────────┬────────────┬──────────────┐
+│ City         │ Area km²  │ Districts  │ Est. Streets │
+├──────────────┼───────────┼────────────┼──────────────┤
+│ Jeddah       │ 1,686     │ ~130       │ ~10,000      │
+│ Riyadh       │ 1,798     │ ~180       │ ~15,000      │
+│ Mecca        │ 1,200     │ ~90        │ ~7,000       │
+│ Madinah      │ 589       │ ~60        │ ~5,000       │
+│ Dammam       │ 1,013     │ ~80        │ ~6,500       │
+│ Khobar       │ 113       │ ~40        │ ~3,000       │
+│ Tabuk        │ 800       │ ~50        │ ~4,000       │
+│ Abha         │ 257       │ ~35        │ ~2,500       │
+│ Taif         │ 400       │ ~45        │ ~3,500       │
+│ Jizan        │ 130       │ ~30        │ ~2,000       │
+└──────────────┴───────────┴────────────┴──────────────┘
+
+TARGET LEAD TYPES:
+→ Sites in Digging / Excavation Phase
+→ Sites in Foundation Phase
+→ Sites Starting First Floor Construction
+
+WHY EARLY PHASE LEADS?
+Early contact = Higher client conversion rate
+Suppliers approach owners BEFORE competitors
+Premium leads command premium pricing
+```
+
+---
+
+# SECTION 3 — BUSINESS OBJECTIVES
+
+---
+
+## 3.1 Primary Objectives
+
+```
+OBJECTIVE 1 — COMPLETE CITY COVERAGE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Goal:    Cover 100% of streets in each active city
+Method:  Systematic zone→district→street assignment
+KPI:     % of streets surveyed per city per month
+
+OBJECTIVE 2 — LEAD QUALITY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Goal:    Collect accurate, verified construction leads
+Method:  GPS-tagged photos + structured form data
+KPI:     % of leads approved by admin
+
+OBJECTIVE 3 — MULTI-CITY SCALABILITY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Goal:    Add any new KSA city within 24 hours
+Method:  City module with pre-loaded map data
+KPI:     Time to onboard new city < 24 hours
+
+OBJECTIVE 4 — DRIVER ACCOUNTABILITY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Goal:    Full transparency of driver activities
+Method:  Live GPS + street completion tracking
+KPI:     Streets covered vs assigned per driver
+
+OBJECTIVE 5 — CLIENT DELIVERY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Goal:    Deliver structured leads to clients fast
+Method:  One-click export with photos and data
+KPI:     Lead delivery time < 24 hours of capture
+
+OBJECTIVE 6 — BUSINESS GROWTH
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Goal:    Scale to all major KSA cities
+Method:  SaaS model with city-based subscription
+KPI:     New cities added per quarter
+```
+
+---
+
+# SECTION 4 — PROJECT SCOPE
+
+---
+
+## 4.1 In Scope
+
+```
+IN SCOPE - PHASE 1 (MVP):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Multi-city support (start with Jeddah)
+✅ Multi-driver support per city (unlimited)
+✅ User management (Super Admin, City Manager,
+   Supervisor, Driver)
+✅ City/Zone/District/Street management
+✅ Driver assignment to streets
+✅ Live GPS tracking per city
+✅ Mobile-friendly driver app (PWA)
+✅ Lead submission with photo upload
+✅ GPS auto-tag on all submissions
+✅ Lead management dashboard
+✅ Coverage map per city
+✅ Basic reports and exports (Excel/PDF)
+✅ Driver check-in / check-out
+✅ Real-time admin dashboard
+✅ Offline mode for driver app
+✅ Arabic + English language support
+
+IN SCOPE - PHASE 2:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Client portal
+✅ Advanced analytics
+✅ WhatsApp notifications
+✅ Automated lead scoring
+✅ Billing and invoicing module
+✅ API for third-party integrations
+✅ Advanced route optimization
+✅ Driver performance scoring system
+
+IN SCOPE - PHASE 3:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ AI-powered lead quality detection
+✅ Automated client matching
+✅ Mobile native app (iOS + Android)
+✅ CRM integration
+✅ Revenue analytics per city
+```
+
+## 4.2 Out of Scope
+
+```
+OUT OF SCOPE:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❌ Payment processing from clients (Phase 2)
+❌ Native iOS/Android app (Phase 3)
+❌ AI image recognition (Phase 3)
+❌ Countries outside KSA (Future)
+❌ Non-construction lead types (Future)
+❌ Vehicle maintenance tracking
+❌ HR and payroll management
+❌ Fuel expense management
+```
+
+---
+
+# SECTION 5 — STAKEHOLDERS
+
+---
+
+## 5.1 Stakeholder Register
+
+```
+┌─────────────────┬──────────────────┬───────────────────────────────┐
+│ Stakeholder     │ Role             │ Interest in System            │
+├─────────────────┼──────────────────┼───────────────────────────────┤
+│ Business Owner  │ Super Admin      │ Full KSA operation visibility │
+│                 │                  │ Revenue and growth tracking   │
+├─────────────────┼──────────────────┼───────────────────────────────┤
+│ City Manager    │ City Admin       │ Manage drivers in their city  │
+│                 │                  │ Review and approve leads      │
+├─────────────────┼──────────────────┼───────────────────────────────┤
+│ Field Supervisor│ Supervisor       │ Monitor driver teams          │
+│                 │                  │ Quality check submissions     │
+├─────────────────┼──────────────────┼───────────────────────────────┤
+│ Field Drivers   │ Data Collectors  │ Simple app to submit leads    │
+│                 │                  │ Clear daily assignments       │
+├─────────────────┼──────────────────┼───────────────────────────────┤
+│ Clients         │ Lead Buyers      │ Quality structured leads      │
+│                 │                  │ Fast delivery with photos     │
+├─────────────────┼──────────────────┼───────────────────────────────┤
+│ Dev Team        │ Builders         │ Clear technical requirements  │
+│                 │                  │ Defined architecture          │
+└─────────────────┴──────────────────┴───────────────────────────────┘
+```
+
+---
+
+# SECTION 6 — BUSINESS REQUIREMENTS
+
+---
+
+## 6.1 Multi-City Business Requirements
+
+```
+BR-001: CITY MANAGEMENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+The system MUST support multiple KSA cities
+Each city operates independently
+Each city has its own:
+  - Zones
+  - Districts
+  - Streets
+  - Drivers
+  - Leads database
+  - Coverage tracking
+  - City Manager
+
+BR-002: DRIVER SCALABILITY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+The system MUST support unlimited drivers
+Drivers are assigned to ONE city at a time
+Drivers can be transferred between cities
+Each city can have different number of drivers
+System must handle 100+ concurrent drivers
+
+BR-003: HIERARCHICAL ACCESS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Super Admin sees ALL cities and ALL data
+City Manager sees ONLY their city data
+Supervisor sees ONLY their assigned drivers
+Driver sees ONLY their assigned streets
+
+BR-004: LEAD OWNERSHIP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Every lead is tagged with:
+  - City
+  - Zone
+  - District
+  - Street
+  - Driver who submitted
+  - Date and time
+  - GPS coordinates
+
+BR-005: COVERAGE CALCULATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+System calculates coverage separately per city
+Super Admin sees KSA-wide coverage summary
+City Manager sees only their city coverage
+Coverage never mixes between cities
+```
+
+---
+
+# SECTION 7 — FUNCTIONAL REQUIREMENTS
+
+---
+
+## 7.1 User Management Module
+
+```
+FR-UM-001: User Registration
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Super Admin creates City Manager accounts
+- City Manager creates Supervisor accounts
+- Supervisor creates Driver accounts
+- Each user assigned to specific city
+- Email + Password authentication
+- JWT token-based sessions
+
+FR-UM-002: User Roles
+━━━━━━━━━━━━━━━━━━━━━━
+
+ROLE 1: SUPER ADMIN
+Permissions:
+✅ Add/Edit/Delete any city
+✅ Add/Edit/Delete any user any city
+✅ View all data across all cities
+✅ Cross-city reports and analytics
+✅ System configuration
+✅ Billing management (Phase 2)
+
+ROLE 2: CITY MANAGER
+Permissions:
+✅ Manage drivers in their city only
+✅ Assign zones/districts/streets to drivers
+✅ View all leads in their city
+✅ Approve/Reject leads in their city
+✅ Export city leads
+✅ View city coverage map
+✅ City-level reports
+❌ Cannot see other cities data
+
+ROLE 3: FIELD SUPERVISOR
+Permissions:
+✅ Monitor assigned drivers only
+✅ View leads from their drivers
+✅ Basic reports for their team
+✅ Flag leads for review
+❌ Cannot approve/reject leads
+❌ Cannot assign new areas
+
+ROLE 4: DRIVER / FIELD AGENT
+Permissions:
+✅ View their assigned streets only
+✅ Submit construction leads
+✅ Update street visit status
+✅ View their own submitted leads
+✅ Daily check-in / check-out
+❌ Cannot view other drivers data
+❌ Cannot see admin dashboard
+
+FR-UM-003: User Profile
+━━━━━━━━━━━━━━━━━━━━━━━━
+Fields:
+- Full Name (Arabic + English)
+- Email Address
+- Phone Number (KSA format)
+- Role
+- Assigned City
+- Assigned Zone (for drivers)
+- Profile Photo
+- Account Status (Active/Inactive)
+- Created Date
+- Last Login
+```
+
+## 7.2 City Management Module
+
+```
+FR-CM-001: City Setup
+━━━━━━━━━━━━━━━━━━━━━━
+Super Admin can add any KSA city:
+- City Name (Arabic + English)
+- City Code (e.g., JED, RUH, MEC)
+- Region / Province
+- Approximate Area (km²)
+- Estimated total streets
+- Assign City Manager
+- City Status (Active/Inactive)
+- City Launch Date
+- Map center coordinates
+
+FR-CM-002: Zone Management per City
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Each city divided into zones:
+- Zone Name (Arabic + English)
+- Zone Code
+- Zone boundary on map
+- Assign driver/supervisor to zone
+- Zone status tracking
+
+JEDDAH ZONES EXAMPLE:
+Zone 1: North Jeddah    (شمال جدة)
+Zone 2: South Jeddah    (جنوب جدة)
+Zone 3: East Jeddah     (شرق جدة)
+Zone 4: West Jeddah     (غرب جدة)
+Zone 5: Central Jeddah  (وسط جدة)
+Zone 6: Industrial Area (المنطقة الصناعية)
+
+RIYADH ZONES EXAMPLE:
+Zone 1: North Riyadh   (شمال الرياض)
+Zone 2: South Riyadh   (جنوب الرياض)
+Zone 3: East Riyadh    (شرق الرياض)
+Zone 4: West Riyadh    (غرب الرياض)
+Zone 5: Central Riyadh (وسط الرياض)
+Zone 6: New Riyadh     (الرياض الجديدة)
+
+FR-CM-003: District Management
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Each zone contains districts (أحياء):
+- District Name (Arabic + English)
+- Parent Zone
+- Parent City
+- Boundary coordinates
+- Assigned driver
+- Coverage status
+- Total streets count
+
+FR-CM-004: Street Management
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Each district contains streets:
+- Street Name (Arabic + English)
+- Parent District
+- Parent Zone
+- Parent City
+- Start/End coordinates
+- Assigned driver
+- Visit status:
+  * Pending
+  * In Progress
+  * Visited - Nothing Found
+  * Visited - Lead Found
+  * Skipped
+- Visit timestamp
+- Skip reason (if skipped)
+```
+
+## 7.3 Driver Assignment Module
+
+```
+FR-DA-001: City-Based Assignment
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+City Manager assigns drivers to:
+Level 1: Entire Zone
+Level 2: Specific Districts
+Level 3: Specific Streets
+
+FR-DA-002: Smart Distribution
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+System calculates auto-distribution:
+
+INPUT:
+- Number of drivers in city
+- Total streets in city
+- Working days available
+- Working hours per day
+
+OUTPUT:
+- Streets per driver
+- Estimated completion date
+- Daily target per driver
+- Suggested zone boundaries
+
+EXAMPLE CALCULATION FOR JEDDAH:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Total Streets:           ~10,000
+Number of Drivers:       6
+Streets per Driver:      ~1,667
+Streets per Day/Driver:  ~100
+Working Days Needed:     ~17 days
+Estimated Completion:    3-4 weeks
+
+FR-DA-003: Assignment Rules
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- One street = One assigned driver
+- No two drivers same street (no overlap)
+- Driver cannot access streets outside assignment
+- Unassigned streets shown in red on map
+- Auto-reassign if driver is deactivated
+
+FR-DA-004: Reassignment
+━━━━━━━━━━━━━━━━━━━━━━━━
+City Manager can:
+- Reassign streets from one driver to another
+- Move entire zone between drivers
+- Add new driver and redistribute workload
+- Handle driver absence/sick leave
+- System logs all reassignment history
+```
+
+## 7.4 Live GPS Tracking Module
+
+```
+FR-GPS-001: Real-Time Tracking
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- GPS ping every 30 seconds from driver app
+- Location stored in database with timestamp
+- Live map shows all drivers in selected city
+- Admin can switch between cities on map
+- Each driver shown in different color
+- Driver name shown on hover/click
+
+FR-GPS-002: Tracking Data Captured
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Per GPS ping record:
+- Driver ID
+- City ID
+- Latitude
+- Longitude
+- Speed (km/h)
+- Accuracy (meters)
+- Current Street ID (auto-detected)
+- Timestamp
+
+FR-GPS-003: Route History
+━━━━━━━━━━━━━━━━━━━━━━━━━
+- Full route recorded per driver per day
+- Breadcrumb trail on map
+- View any past day history
+- Total distance calculated
+- Time spent per street
+- Idle time recorded
+
+FR-GPS-004: Alerts System
+━━━━━━━━━━━━━━━━━━━━━━━━━
+Automatic alerts to City Manager:
+
+⚠️ Driver idle > 15 minutes
+⚠️ Driver went offline
+⚠️ Driver left assigned area
+⚠️ Driver not checked in by 9am
+⚠️ Driver speed > 120 km/h
+⚠️ Driver battery low (< 20%)
+
+FR-GPS-005: Multi-City Map View
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Super Admin sees:
+- KSA map with all active cities
+- Total active drivers per city
+- City coverage percentage bubbles
+- Click city = zoom to city view
+- All drivers in that city visible
+```
+
+## 7.5 Lead Submission Module
+
+```
+FR-LS-001: Lead Capture Form
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Step 1 — Location (Auto-filled):
+  ✦ City (auto from driver profile)
+  ✦ Zone (auto from assignment)
+  ✦ District (auto from assignment)
+  ✦ Street Name (auto from GPS)
+  ✦ GPS Coordinates (auto captured)
+  ✦ Nearest Landmark (manual - required)
+
+Step 2 — Site Information:
+  ✦ Plot Number (text)
+  ✦ Site/Project Name (text)
+  ✦ Construction Phase (select):
+      ○ Just Digging Started
+      ○ Foundation Phase
+      ○ First Floor Starting
+      ○ Other (specify)
+  ✦ Estimated Project Size:
+      ○ Villa (فيلا)
+      ○ Small Building (2-5 floors)
+      ○ Medium Building (6-10 floors)
+      ○ Tower (10+ floors)
+      ○ Commercial
+      ○ Industrial
+      ○ Unknown
+
+Step 3 — Photos (Mandatory):
+  ✦ Billboard Photo (min 1 required)
+  ✦ Site Front Photo (min 1 required)
+  ✦ Site Side Photo (optional)
+  ✦ Additional Photos (optional, max 10)
+  All photos AUTO-WATERMARKED with:
+    - GPS coordinates
+    - Date and Time
+    - Driver Name
+    - City Name
+
+Step 4 — Contact Info from Billboard:
+  ✦ Owner Name (text)
+  ✦ Owner Phone (tel)
+  ✦ Contractor Name (text)
+  ✦ Contractor Phone (tel)
+  ✦ Project Name (text)
+  ✦ Engineer Name (text)
+  ✦ Consultant Name (text)
+
+Step 5 — Additional Notes:
+  ✦ Observations (textarea)
+  ✦ Site accessibility notes
+  ✦ Submit Button
+
+FR-LS-002: Photo Requirements
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Minimum resolution: 1MP
+- Max file size: 10MB per photo
+- Accepted formats: JPG, PNG, HEIC
+- Auto-compress before upload
+- GPS metadata preserved
+- Auto-upload to cloud storage
+- Offline storage if no internet
+- Auto-sync when connected
+
+FR-LS-003: Duplicate Detection
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+System checks for duplicates:
+- Same GPS coordinates (within 50m)
+- Same plot number in same district
+- If duplicate found:
+  → Show warning to driver
+  → Allow driver to confirm or cancel
+  → Admin notified of potential duplicate
+
+FR-LS-004: Offline Support
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Driver app works without internet
+- Lead data saved locally on phone
+- Photos cached locally
+- Auto-sync queue when internet returns
+- Sync status shown to driver
+- Admin sees "pending sync" badge on leads
+```
+
+## 7.6 Coverage Tracking Module
+
+```
+FR-CT-001: Coverage Dashboard
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Per City shows:
+┌─────────────────────────────────────┐
+│ JEDDAH COVERAGE                     │
+│ Overall: ████████░░ 78%             │
+├──────────────┬──────────────────────┤
+│ Zone         │ Coverage %           │
+├──────────────┼──────────────────────┤
+│ North Jeddah │ ██████████ 95%       │
+│ South Jeddah │ ████████░░ 82%       │
+│ East Jeddah  │ ██████░░░░ 61%       │
+│ West Jeddah  │ ████░░░░░░ 44%       │
+│ Central      │ ███░░░░░░░ 33%       │
+│ Industrial   │ ██████████ 100%      │
+└──────────────┴──────────────────────┘
+
+FR-CT-002: Map Color Coding
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Streets colored on map:
+⬜ Gray    = Not yet assigned
+🔵 Blue    = Assigned to driver
+🟡 Yellow  = Currently being surveyed
+🟢 Green   = Completed (visited)
+🔴 Red     = Skipped / Problem
+
+FR-CT-003: Completion Estimation
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+System shows:
+- Streets remaining per driver
+- Estimated days to complete city
+- Completion date prediction
+- Behind schedule alerts
+
+FR-CT-004: KSA-Wide Summary
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Super Admin sees:
+┌──────────────┬──────────┬──────────┬──────────┐
+│ City         │ Coverage │ Drivers  │ Leads    │
+├──────────────┼──────────┼──────────┼──────────┤
+│ Jeddah       │ 78%      │ 6        │ 1,240    │
+│ Riyadh       │ 45%      │ 10       │ 2,100    │
+│ Dammam       │ 20%      │ 4        │ 380      │
+│ Mecca        │ 10%      │ 3        │ 210      │
+└──────────────┴──────────┴──────────┴──────────┘
+```
+
+## 7.7 Lead Management Module
+
+```
+FR-LM-001: Lead List View
+━━━━━━━━━━━━━━━━━━━━━━━━━
+Filters available:
+- City (multi-select)
+- Zone
+- District
+- Construction Phase
+- Project Size
+- Lead Status
+- Driver
+- Date Range
+- Search by plot/name
+
+FR-LM-002: Lead Statuses
+━━━━━━━━━━━━━━━━━━━━━━━━━
+🟡 Pending       = Just submitted, awaiting review
+✅ Approved      = Verified by City Manager
+❌ Rejected      = Failed quality check
+📤 Sent to Client = Delivered to client
+🔄 Duplicate     = Same site already exists
+⭐ Premium       = High value lead flagged
+
+FR-LM-003: Lead Detail View
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Shows:
+- Photo gallery (full screen view)
+- All location details
+- All site information
+- All contact details from billboard
+- Map showing exact location
+- Driver who submitted
+- Submission timestamp
+- Review history
+- Admin notes timeline
+
+FR-LM-004: Bulk Actions
+━━━━━━━━━━━━━━━━━━━━━━━━
+City Manager can:
+- Select multiple leads
+- Bulk approve
+- Bulk reject
+- Bulk export
+- Bulk assign to client
+- Bulk change status
+```
+
+## 7.8 Reporting Module
+
+```
+FR-RP-001: Operational Reports
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+REPORT 1: Daily Operations Report
+- Per city, per driver
+- Streets covered today
+- Leads submitted today
+- KM driven today
+- Hours worked
+- Check-in/out times
+
+REPORT 2: Coverage Progress Report
+- City-wise coverage %
+- Zone-wise coverage %
+- Estimated completion dates
+- Behind schedule alerts
+
+REPORT 3: Driver Performance Report
+- Leads per driver per period
+- Streets covered per driver
+- Quality rate (approved leads %)
+- Attendance record
+- KM driven total
+
+REPORT 4: Lead Analysis Report
+- Leads by city
+- Leads by construction phase
+- Leads by project size
+- Leads by district
+- Trend over time
+
+REPORT 5: Client Delivery Report
+- Leads sent per client
+- Leads per city per client
+- Delivery dates
+- Lead status tracking
+
+FR-RP-002: Export Formats
+━━━━━━━━━━━━━━━━━━━━━━━━━
+- Excel (.xlsx) with all data
+- PDF with photos included
+- CSV for CRM import
+- Branded report template
+- Company logo on exports
+- Arabic/English export option
+```
+
+---
+
+# SECTION 8 — NON-FUNCTIONAL REQUIREMENTS
+
+---
+
+```
+NFR-001: PERFORMANCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Page load time < 3 seconds
+- GPS ping response < 1 second
+- Lead submission < 5 seconds
+- Support 100+ concurrent drivers
+- Support 10+ cities simultaneously
+- Map loads within 4 seconds
+
+NFR-002: AVAILABILITY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- System uptime: 99.5% minimum
+- Maintenance windows: Off-peak hours only
+- Driver app works offline (no downtime impact)
+- Auto-reconnect on connection loss
+
+NFR-003: SECURITY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- JWT authentication
+- Role-based access control (RBAC)
+- Data encrypted in transit (HTTPS/TLS)
+- Passwords hashed (bcrypt)
+- City data isolation (no cross-city data leak)
+- Photo access requires authentication
+- Session timeout after 8 hours
+- Failed login lockout after 5 attempts
+
+NFR-004: SCALABILITY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Add new city without code changes
+- Add unlimited drivers per city
+- Handle 1,000+ leads per day
+- Handle 50,000+ GPS pings per day
+- Photo storage scales automatically
+- Database handles millions of records
+
+NFR-005: USABILITY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Driver app: Max 3 taps to submit lead
+- Arabic RTL support throughout
+- Large buttons for in-car use
+- Works on low-end Android phones
+- Works on 3G connection minimum
+- Bilingual (Arabic + English) interface
+
+NFR-006: DATA INTEGRITY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Daily automated database backup
+- GPS coordinates validated before save
+- Photo GPS metadata preserved
+- Duplicate detection system
+- Audit log for all data changes
+- Soft delete (no permanent data loss)
+```
+
+---
+
+# SECTION 9 — SYSTEM ARCHITECTURE
+
+---
+
+```
+ARCHITECTURE OVERVIEW:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+┌─────────────────────────────────────────────────┐
+│                   CLIENTS                        │
+│  Web Browser (Admin)  │  Mobile Browser (Driver) │
+└──────────┬────────────┴──────────────┬───────────┘
+           │                           │
+           ▼                           ▼
+┌─────────────────────────────────────────────────┐
+│              FRONTEND LAYER                      │
+│         React.js + Tailwind CSS                  │
+│   Admin Dashboard  │  Driver PWA Mobile App      │
+└──────────┬─────────────────────────-┬────────────┘
+           │                           │
+           ▼                           ▼
+┌─────────────────────────────────────────────────┐
+│              BACKEND LAYER                       │
+│           Node.js + Express.js                   │
+│                                                  │
+│  Auth API  │  Leads API  │  Tracking API         │
+│  City API  │  Driver API │  Reports API          │
+│                                                  │
+│         Socket.io (Real-time)                    │
+└──────────┬──────────────────────────┬────────────┘
+           │                           │
+    ┌──────▼──────┐            ┌───────▼──────┐
+    │ PostgreSQL  │            │  Cloudinary  │
+    │  Database   │            │  (Photos)    │
+    └─────────────┘            └──────────────┘
+
+TECH STACK:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Frontend:    React.js + Vite + Tailwind CSS
+Backend:     Node.js + Express.js
+Database:    PostgreSQL (Neon.tech)
+Maps:        Leaflet.js (Free)
+Real-time:   Socket.io
+Photos:      Cloudinary
+Auth:        JWT Tokens
+Hosting:     Replit (Development)
+             DigitalOcean/AWS (Production)
+```
+
+---
+
+# SECTION 10 — DATABASE DESIGN
+
+---
+
+```
+CORE TABLES:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TABLE 1: cities
+- id, name_en, name_ar, code
+- region, area_km2, status
+- map_lat, map_lng, map_zoom
+- manager_id, created_at
+
+TABLE 2: zones
+- id, city_id, name_en, name_ar
+- code, color_code, status
+- supervisor_id, created_at
+
+TABLE 3: districts
+- id, zone_id, city_id
+- name_en, name_ar, code
+- status, assigned_driver_id
+- total_streets, covered_streets
+
+TABLE 4: streets
+- id, district_id, zone_id, city_id
+- name_en, name_ar
+- lat_start, lng_start
+- lat_end, lng_end
+- assigned_driver_id, status
+- visited_at, skip_reason
+
+TABLE 5: users
+- id, name, email, password
+- role, phone, city_id
+- zone_id, is_active
+- profile_photo, created_at
+
+TABLE 6: leads
+- id, driver_id, city_id
+- zone_id, district_id, street_id
+- latitude, longitude
+- construction_phase, project_size
+- plot_number, site_name
+- billboard_photos[], site_photos[]
+- owner_name, owner_phone
+- contractor_name, contractor_phone
+- project_name, engineer_name
+- notes, status
+- submitted_at, reviewed_at
+- reviewed_by, admin_notes
+
+TABLE 7: gps_tracking
+- id, driver_id, city_id
+- latitude, longitude
+- speed, accuracy
+- street_id, recorded_at
+
+TABLE 8: driver_sessions
+- id, driver_id, city_id
+- session_date, check_in_time
+- check_out_time, check_in_photo
+- check_in_lat, check_in_lng
+- total_km, total_leads
+- streets_covered
+```
+
+---
+
+# SECTION 11 — CONSTRAINTS & ASSUMPTIONS
+
+---
+
+```
+CONSTRAINTS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+C-001: Drivers must have active internet (3G min)
+C-002: Driver phones must support GPS
+C-003: Photos must be taken on-site (no uploads)
+C-004: System language: Arabic + English only
+C-005: KSA geography only (Phase 1)
+C-006: Operating hours: 7am - 7pm daily
+C-007: Drivers operate within KSA laws
+
+ASSUMPTIONS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+A-001: Each city will have dedicated drivers
+A-002: City Managers manage their own teams
+A-003: Drivers have Android smartphones
+A-004: Each driver covers ~100 streets/day
+A-005: Working days: Saturday to Thursday
+A-006: Map data sourced from OpenStreetMap
+A-007: Cloudinary free tier sufficient for MVP
+```
+
+---
+
+# SECTION 12 — RISKS & MITIGATION
+
+---
+
+```
+┌────┬──────────────────────────┬──────────┬─────────────────────────────┐
+│ ID │ Risk                     │ Impact   │ Mitigation                  │
+├────┼──────────────────────────┼──────────┼─────────────────────────────┤
+│ R1 │ Driver loses internet    │ High     │ Offline mode + auto-sync    │
+│ R2 │ GPS inaccuracy           │ Medium   │ 50m radius tolerance        │
+│ R3 │ Duplicate lead entries   │ Medium   │ Auto-duplicate detection    │
+│ R4 │ Driver skips streets     │ High     │ GPS route verification      │
+│ R5 │ Photo storage limit      │ Medium   │ Cloudinary paid upgrade     │
+│ R6 │ Database overload        │ High     │ Pagination + indexing       │
+│ R7 │ Driver app crashes       │ High     │ PWA + local storage backup  │
+│ R8 │ New city data missing    │ Medium   │ OSM data import tool        │
+│ R9 │ Privacy concerns         │ High     │ Data access control + RBAC  │
+│R10 │ Driver uses fake location│ High     │ Speed check + photo GPS tag │
+└────┴──────────────────────────┴──────────┴─────────────────────────────┘
+```
+
+---
+
+# SECTION 13 — SUCCESS CRITERIA
+
+---
+
+```
+SUCCESS METRICS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+OPERATIONAL SUCCESS:
+✅ 100% of assigned streets are tracked
+✅ 0 streets surveyed twice by different drivers
+✅ GPS accuracy within 50 meters
+✅ Lead submission time < 3 minutes
+✅ App works on 3G without crashes
+
+DATA QUALITY SUCCESS:
+✅ 90%+ of submitted leads approved
+✅ Every lead has minimum 2 photos
+✅ Every lead has valid GPS coordinates
+✅ 0 leads without city/zone/district tags
+✅ Duplicate detection catches 95%+ duplicates
+
+BUSINESS SUCCESS:
+✅ Jeddah 100% covered in 20 working days
+✅ Any new KSA city onboarded within 24 hours
+✅ Client leads exported within 24hrs of capture
+✅ Driver accountability 100% trackable
+✅ System handles 5+ cities simultaneously
+```
+
+---
+
+# SECTION 14 — TIMELINE & PHASES
+
+---
+
+```
+PHASE 1 — MVP (8-10 Weeks):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Week 1-2:  Database + Authentication + User Management
+Week 3-4:  City/Zone/District/Street Management
+Week 5-6:  Driver App + Lead Submission + GPS Tracking
+Week 7-8:  Admin Dashboard + Coverage Map + Live Tracking
+Week 9-10: Reports + Export + Testing + Launch Jeddah
+
+PHASE 2 — Enhanced (4-6 Weeks):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Week 1-2:  Client Portal
+Week 3-4:  WhatsApp Notifications + Advanced Reports
+Week 5-6:  Billing Module + API Access
+
+PHASE 3 — Scale (4-6 Weeks):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Week 1-2:  Native Mobile App (iOS + Android)
+Week 3-4:  AI Lead Quality Detection
+Week 5-6:  CRM Integration + Automation
+```
+
+---
+
+# SECTION 15 — GLOSSARY
+
+---
+
+```
+TERM              DEFINITION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Super Admin       Business owner with full system access
+City Manager      User managing operations in one city
+Supervisor        User monitoring a group of drivers
+Driver            Field agent collecting construction leads
+Lead              A construction site data record
+Zone              Major area division within a city
+District (حي)     Neighborhood within a zone
+Street            Individual road within a district
+Coverage          % of streets surveyed in an area
+GPS Ping          Location update sent every 30 seconds
+PWA               Progressive Web App (mobile browser app)
+KSA               Kingdom of Saudi Arabia
+OSM               OpenStreetMap (free map data source)
+Phase             Construction progress stage of a site
+Billboard         Site hoarding with project details
+Check-in          Driver start of day confirmation
+Check-out         Driver end of day confirmation
+Breadcrumb        GPS route trail on map
+RBAC              Role Based Access Control
+JWT               JSON Web Token (authentication method)
+```
+
+---
+
+## 📄 DOCUMENT SIGN-OFF
+
+```
+┌─────────────────────┬────────────────┬────────────┐
+│ Role                │ Name           │ Signature  │
+├─────────────────────┼────────────────┼────────────┤
+│ Business Owner      │                │            │
+│ Project Manager     │                │            │
+│ Lead Developer      │                │            │
+│ QA Lead             │                │            │
+└─────────────────────┴────────────────┴────────────┘
+
+Document Version Control:
+━━━━━━━━━━━━━━━━━━━━━━━━━
+v1.0 - Initial Draft - Single City (Jeddah)
+v2.0 - Updated - Multi-City KSA Support Added
+```
+
+---
+
+**Do you want me to now create:**
+- 📊 **Technical Specification Document (TSD)?**
+- 🗄️ **Complete Database Schema SQL?**
+- 🎨 **UI/UX Wireframes Description?**
+- 🔧 **Full Replit Build Prompt v2 (Multi-City)?**
+- 📱 **Driver App User Flow Document?**
