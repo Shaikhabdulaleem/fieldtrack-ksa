@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, useRouteError } from "react-router";
 import { AdminLayout } from "./components/layouts/AdminLayout";
 import { DriverLayout } from "./components/layouts/DriverLayout";
 import { AdminLogin } from "./components/admin/AdminLogin";
@@ -23,6 +23,31 @@ import { OfflineSync } from "./components/driver/OfflineSync";
 import { Settings } from "./components/Settings";
 import { ProtectedRoute } from "./components/shared/ProtectedRoute";
 
+function NotFoundPage() {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", gap: "12px", fontFamily: "sans-serif" }}>
+      <div style={{ fontSize: "64px", fontWeight: 700, color: "#2563eb" }}>404</div>
+      <div style={{ fontSize: "20px", fontWeight: 600, color: "#1e293b" }}>Page not found</div>
+      <div style={{ color: "#64748b" }}>The page you're looking for doesn't exist.</div>
+      <a href="/" style={{ marginTop: "8px", color: "#2563eb", textDecoration: "underline" }}>Go to Dashboard</a>
+    </div>
+  );
+}
+
+function RouteErrorPage() {
+  const error = useRouteError() as { status?: number; statusText?: string; message?: string } | null;
+  const is404 = error?.status === 404;
+  if (is404) return <NotFoundPage />;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", gap: "12px", fontFamily: "sans-serif" }}>
+      <div style={{ fontSize: "48px", fontWeight: 700, color: "#dc2626" }}>Oops!</div>
+      <div style={{ fontSize: "18px", fontWeight: 600, color: "#1e293b" }}>Something went wrong</div>
+      <div style={{ color: "#64748b" }}>{error?.statusText ?? error?.message ?? "An unexpected error occurred."}</div>
+      <a href="/" style={{ marginTop: "8px", color: "#2563eb", textDecoration: "underline" }}>Go to Dashboard</a>
+    </div>
+  );
+}
+
 function AdminGuard({ children }: { children: React.ReactNode }) {
   return (
     <ProtectedRoute roles={["super_admin", "city_manager"]} loginPath="/login">
@@ -46,6 +71,7 @@ export const router = createBrowserRouter([
   },
   {
     path: "/",
+    errorElement: <RouteErrorPage />,
     element: (
       <AdminGuard>
         <AdminLayout />
@@ -69,6 +95,7 @@ export const router = createBrowserRouter([
   },
   {
     path: "/driver",
+    errorElement: <RouteErrorPage />,
     children: [
       { index: true, Component: DriverLogin },
       {
@@ -88,5 +115,9 @@ export const router = createBrowserRouter([
         ],
       },
     ],
+  },
+  {
+    path: "*",
+    element: <NotFoundPage />,
   },
 ]);
