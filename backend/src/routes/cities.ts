@@ -88,6 +88,9 @@ citiesRouter.patch("/cities/:id", requireAuth, requireRole("super_admin", "city_
       nameAr: z.string().optional(),
       centerLat: z.string().optional(),
       centerLng: z.string().optional(),
+      targetDays: z.number().int().min(1).optional(),
+      targetLeadsPerDriver: z.number().int().min(0).optional(),
+      maxStreetsPerDriver: z.number().int().min(1).optional(),
     });
     const data = schema.parse(req.body);
     const [city] = await db
