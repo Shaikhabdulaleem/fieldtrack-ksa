@@ -144,7 +144,10 @@ assignmentsRouter.post("/assignments/bulk-delete", requireAuth, requireRole("sup
         const stillAssigned = await tx
           .select({ streetId: driverAssignments.streetId })
           .from(driverAssignments)
-          .where(inArray(driverAssignments.streetId, streetIds));
+          .where(and(
+            inArray(driverAssignments.streetId, streetIds),
+            inArray(driverAssignments.status, ["assigned", "in_progress"]),
+          ));
         const stillAssignedSet = new Set(stillAssigned.map(r => r.streetId));
         const orphanedStreetIds = streetIds.filter(id => !stillAssignedSet.has(id));
         if (orphanedStreetIds.length) {
