@@ -119,22 +119,38 @@ assignmentsRouter.post("/assignments/bulk-delete", requireAuth, requireRole("sup
       assignmentIds: z.array(z.string().uuid()).min(1).max(5000),
     }).parse(req.body);
 
-    const rows = await db
-      .delete(driverAssignments)
-      .where(inArray(driverAssignments.id, assignmentIds))
-      .returning({ streetId: driverAssignments.streetId, surveyZoneId: driverAssignments.surveyZoneId });
-
-    const streetIds = rows.map(r => r.streetId).filter(Boolean) as string[];
-    if (streetIds.length) {
-      await db.update(streets).set({ status: "not_assigned" }).where(inArray(streets.id, streetIds));
+    // City managers can only delete assignments in their own city.
+    if (req.user!.role === "city_manager") {
+      const owned = await db
+        .select({ id: driverAssignments.id })
+        .from(driverAssignments)
+        .where(and(inArray(driverAssignments.id, assignmentIds), eq(driverAssignments.cityId, req.user!.cityId!)));
+      if (owned.length !== assignmentIds.length) {
+        throw new AppError(403, "Cannot delete assignments outside your city");
+      }
     }
 
-    const affectedZoneIds = [...new Set(rows.map(r => r.surveyZoneId).filter(Boolean) as string[])];
-    for (const zoneId of affectedZoneIds) {
-      await syncSurveyZoneAssignmentState(zoneId);
-    }
+    let deletedCount = 0;
+    await db.transaction(async (tx) => {
+      const rows = await tx
+        .delete(driverAssignments)
+        .where(inArray(driverAssignments.id, assignmentIds))
+        .returning({ streetId: driverAssignments.streetId, surveyZoneId: driverAssignments.surveyZoneId });
 
-    res.json({ ok: true, deleted: rows.length });
+      deletedCount = rows.length;
+
+      const streetIds = rows.map(r => r.streetId).filter(Boolean) as string[];
+      if (streetIds.length) {
+        await tx.update(streets).set({ status: "not_assigned" }).where(inArray(streets.id, streetIds));
+      }
+
+      const affectedZoneIds = [...new Set(rows.map(r => r.surveyZoneId).filter(Boolean) as string[])];
+      for (const zoneId of affectedZoneIds) {
+        await syncSurveyZoneAssignmentState(zoneId, tx);
+      }
+    });
+
+    res.json({ ok: true, deleted: deletedCount });
   } catch (err) {
     next(err);
   }

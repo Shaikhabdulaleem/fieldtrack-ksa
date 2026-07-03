@@ -224,8 +224,14 @@ export function AssignmentManager() {
     if (!selectedAssignmentIds.size) return;
     setBulkDeleting(true);
     try {
-      const result = await bulkDeleteAssignments([...selectedAssignmentIds]);
-      toast.success(`Deleted ${result.deleted} assignment(s)`);
+      const ids = [...selectedAssignmentIds];
+      const CHUNK = 5000;
+      let totalDeleted = 0;
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const result = await bulkDeleteAssignments(ids.slice(i, i + CHUNK));
+        totalDeleted += result.deleted;
+      }
+      toast.success(`Deleted ${totalDeleted} assignment(s)`);
       setSelectedAssignmentIds(new Set());
       await loadCityData();
     } catch (err) {
@@ -272,7 +278,11 @@ export function AssignmentManager() {
         .map(zone => ({
           ...zone,
           districts: zone.districts
-            .map(district => ({ ...district, streets: district.streets.filter(street => street.status === "on_hold") }))
+            .map(district => ({
+              ...district,
+              streets: district.streets.filter(street => street.status === "on_hold"),
+              assignments: district.assignments.filter(a => a.status === "on_hold"),
+            }))
             .filter(district => district.streets.length > 0),
         }))
         .filter(zone => zone.districts.length > 0);
