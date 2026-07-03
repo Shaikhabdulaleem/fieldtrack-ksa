@@ -241,7 +241,7 @@ export function AssignmentManager() {
     }
   };
 
-  const allAssignmentIds = zones.flatMap(z => z.districts.flatMap(d => d.assignments.map(a => a.id)));
+  const allAssignmentIds = visibleZones.flatMap(z => z.districts.flatMap(d => d.assignments.map(a => a.id)));
 
   const toggleSelectAllAssignments = (checked: boolean) => {
     setSelectedAssignmentIds(checked ? new Set(allAssignmentIds) : new Set());
