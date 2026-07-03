@@ -112,6 +112,34 @@ assignmentsRouter.delete("/assignments/:id", requireAuth, requireRole("super_adm
   }
 });
 
+// POST /api/v1/assignments/bulk-delete
+assignmentsRouter.post("/assignments/bulk-delete", requireAuth, requireRole("super_admin", "city_manager"), async (req, res, next) => {
+  try {
+    const { assignmentIds } = z.object({
+      assignmentIds: z.array(z.string().uuid()).min(1).max(5000),
+    }).parse(req.body);
+
+    const rows = await db
+      .delete(driverAssignments)
+      .where(inArray(driverAssignments.id, assignmentIds))
+      .returning({ streetId: driverAssignments.streetId, surveyZoneId: driverAssignments.surveyZoneId });
+
+    const streetIds = rows.map(r => r.streetId).filter(Boolean) as string[];
+    if (streetIds.length) {
+      await db.update(streets).set({ status: "not_assigned" }).where(inArray(streets.id, streetIds));
+    }
+
+    const affectedZoneIds = [...new Set(rows.map(r => r.surveyZoneId).filter(Boolean) as string[])];
+    for (const zoneId of affectedZoneIds) {
+      await syncSurveyZoneAssignmentState(zoneId);
+    }
+
+    res.json({ ok: true, deleted: rows.length });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /api/v1/assignments/assign-district
 assignmentsRouter.post("/assignments/assign-district", requireAuth, requireRole("super_admin", "city_manager"), async (req, res, next) => {
   try {

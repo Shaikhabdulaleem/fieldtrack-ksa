@@ -324,6 +324,13 @@ export async function deleteAssignment(id: string) {
   return request<Record<string, unknown>>(`/assignments/${id}`, { method: "DELETE" });
 }
 
+export async function bulkDeleteAssignments(assignmentIds: string[]) {
+  return request<{ ok: boolean; deleted: number }>("/assignments/bulk-delete", {
+    method: "POST",
+    body: JSON.stringify({ assignmentIds }),
+  });
+}
+
 // ── Assignments ─────────────────────────────────────────────────────────────
 export async function getAssignments(params?: Record<string, string>) {
   const qs = params ? "?" + new URLSearchParams(params).toString() : "";

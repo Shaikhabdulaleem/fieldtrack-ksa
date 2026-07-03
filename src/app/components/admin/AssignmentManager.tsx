@@ -5,9 +5,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 // NEW - allow bulk selection of Grey on-hold streets.
 import { Checkbox } from "../ui/checkbox";
 // CHANGED - include the dedicated on-hold bulk reassignment API.
-import { getCities, getCityZones, getZoneDistricts, getDistrictStreets, getUsers, autoPlan, getAssignments, assignDistrict, reassignDistrict, reassignOnHoldStreets } from "../../lib/api";
-// CHANGED - add the bulk reassignment action icon.
-import { Save, RefreshCw, MapPin, Zap, ChevronDown, ChevronRight, Loader2, UserCheck, Map as MapIcon, ArrowRightLeft } from "lucide-react";
+import { getCities, getCityZones, getZoneDistricts, getDistrictStreets, getUsers, autoPlan, getAssignments, assignDistrict, reassignDistrict, reassignOnHoldStreets, bulkDeleteAssignments } from "../../lib/api";
+import { Save, RefreshCw, MapPin, Zap, ChevronDown, ChevronRight, Loader2, UserCheck, Map as MapIcon, ArrowRightLeft, Trash2 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { DistrictActivityMap } from "./DistrictActivityMap";
@@ -23,11 +22,22 @@ interface ZoneData {
   districts: DistrictData[];
 }
 
+interface AssignmentData {
+  id: string;
+  streetId: string;
+  streetNameEn: string;
+  driverId: string;
+  driverName: string;
+  status: string;
+  assignedDate: string;
+}
+
 interface DistrictData {
   id: string;
   nameEn: string;
   nameAr: string;
   streets: StreetData[];
+  assignments: AssignmentData[];
   assignedDrivers: { driverId: string; driverName: string; count: number }[];
   unassignedCount: number;
 }
@@ -49,11 +59,12 @@ export function AssignmentManager() {
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState<string | null>(null);
   const [activityMap, setActivityMap] = useState<{ districtId: string; districtName: string; assignedDrivers: { driverId: string; driverName: string; count: number }[] } | null>(null);
-  // NEW - filter and bulk-selection state for Grey on-hold streets.
   const [statusFilter, setStatusFilter] = useState<"all" | "on_hold">("all");
   const [selectedOnHoldStreetIds, setSelectedOnHoldStreetIds] = useState<Set<string>>(new Set());
   const [bulkDriverId, setBulkDriverId] = useState("");
   const [bulkAssigning, setBulkAssigning] = useState(false);
+  const [selectedAssignmentIds, setSelectedAssignmentIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   useEffect(() => {
     getCities().then(c => {
@@ -85,10 +96,11 @@ export function AssignmentManager() {
               const sts = await getDistrictStreets(String(d.id));
 
               const districtAssignments = assignmentData.filter(
-                (a) => String(a.districtId) === String(d.id) && String(a.status) === "assigned"
+                (a) => String(a.districtId) === String(d.id)
               );
+              const activeAssignments = districtAssignments.filter(a => String(a.status) === "assigned");
               const driverCounts = new Map<string, number>();
-              districtAssignments.forEach(a => {
+              activeAssignments.forEach(a => {
                 const did = String(a.driverId);
                 driverCounts.set(did, (driverCounts.get(did) || 0) + 1);
               });
@@ -96,6 +108,19 @@ export function AssignmentManager() {
                 driverId,
                 driverName: driverMap.get(driverId) || "Unknown",
                 count,
+              }));
+
+              const streetNameMap = new Map<string, string>();
+              sts.forEach(s => streetNameMap.set(String(s.id), String(s.nameEn ?? "")));
+
+              const assignments: AssignmentData[] = districtAssignments.map(a => ({
+                id: String(a.id),
+                streetId: String(a.streetId ?? ""),
+                streetNameEn: streetNameMap.get(String(a.streetId)) || "Unknown street",
+                driverId: String(a.driverId),
+                driverName: driverMap.get(String(a.driverId)) || "Unknown",
+                status: String(a.status ?? "assigned"),
+                assignedDate: String(a.assignedDate ?? ""),
               }));
 
               const unassignedCount = sts.filter(s => String(s.status) === "not_assigned").length;
@@ -110,6 +135,7 @@ export function AssignmentManager() {
                   nameAr: String(s.nameAr ?? ""),
                   status: String(s.status ?? "not_assigned"),
                 })),
+                assignments,
                 assignedDrivers,
                 unassignedCount,
               };
@@ -137,10 +163,10 @@ export function AssignmentManager() {
 
   useEffect(() => { loadCityData(); }, [loadCityData]);
 
-  // NEW - never carry a bulk selection into another city.
   useEffect(() => {
     setSelectedOnHoldStreetIds(new Set());
     setBulkDriverId("");
+    setSelectedAssignmentIds(new Set());
   }, [selectedCityId]);
 
   const handleAssignDriver = async (districtId: string, driverId: string, district: DistrictData) => {
@@ -192,6 +218,35 @@ export function AssignmentManager() {
     } finally {
       setBulkAssigning(false);
     }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!selectedAssignmentIds.size) return;
+    setBulkDeleting(true);
+    try {
+      const result = await bulkDeleteAssignments([...selectedAssignmentIds]);
+      toast.success(`Deleted ${result.deleted} assignment(s)`);
+      setSelectedAssignmentIds(new Set());
+      await loadCityData();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Bulk delete failed");
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  const allAssignmentIds = zones.flatMap(z => z.districts.flatMap(d => d.assignments.map(a => a.id)));
+
+  const toggleSelectAllAssignments = (checked: boolean) => {
+    setSelectedAssignmentIds(checked ? new Set(allAssignmentIds) : new Set());
+  };
+
+  const toggleDistrictAssignments = (district: DistrictData, checked: boolean) => {
+    setSelectedAssignmentIds(prev => {
+      const next = new Set(prev);
+      district.assignments.forEach(a => checked ? next.add(a.id) : next.delete(a.id));
+      return next;
+    });
   };
 
   const toggleZone = (id: string) => {
@@ -334,6 +389,32 @@ export function AssignmentManager() {
         </CardContent>
       </Card>
 
+      {allAssignmentIds.length > 0 && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <Checkbox
+                  checked={allAssignmentIds.length > 0 && selectedAssignmentIds.size === allAssignmentIds.length}
+                  onCheckedChange={(checked) => toggleSelectAllAssignments(!!checked)}
+                />
+                Select All Assignments ({allAssignmentIds.length})
+              </label>
+              {selectedAssignmentIds.size > 0 && (
+                <Button
+                  variant="destructive"
+                  onClick={() => void handleBulkDelete()}
+                  disabled={bulkDeleting}
+                >
+                  {bulkDeleting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                  Delete Selected ({selectedAssignmentIds.size})
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Drivers in City ({drivers.length})</CardTitle>
@@ -393,14 +474,22 @@ export function AssignmentManager() {
                 {zone.districts.map((district) => (
                   <div key={district.id} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                     <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 gap-3">
-                      <button
-                        className="flex items-center gap-3 text-left flex-1 min-w-0"
-                        onClick={() => toggleDistrict(district.id)}
-                      >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        {district.assignments.length > 0 && (
+                          <Checkbox
+                            checked={district.assignments.length > 0 && district.assignments.every(a => selectedAssignmentIds.has(a.id))}
+                            onCheckedChange={(checked) => toggleDistrictAssignments(district, !!checked)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        )}
+                        <button
+                          className="flex items-center gap-3 text-left flex-1 min-w-0"
+                          onClick={() => toggleDistrict(district.id)}
+                        >
                         {expandedDistricts.has(district.id) ? <ChevronDown className="w-4 h-4 shrink-0" /> : <ChevronRight className="w-4 h-4 shrink-0" />}
                         <div className="min-w-0">
                           <h4 className="font-semibold text-gray-900 dark:text-white">{district.nameEn}</h4>
-                          <p className="text-sm text-gray-500">{district.nameAr} &bull; {district.streets.length} streets</p>
+                          <p className="text-sm text-gray-500">{district.nameAr} &bull; {district.streets.length} streets &bull; {district.assignments.length} assignments</p>
                           {district.assignedDrivers.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1">
                               {district.assignedDrivers.map(ad => (
@@ -413,6 +502,7 @@ export function AssignmentManager() {
                           )}
                         </div>
                       </button>
+                      </div>
 
                       <div className="flex items-center gap-2 shrink-0">
                         <Badge variant="secondary">
@@ -464,32 +554,61 @@ export function AssignmentManager() {
                     </div>
                     {expandedDistricts.has(district.id) && (
                       <div className="p-4 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 space-y-1">
-                        {district.streets.map((street) => (
-                          <div key={street.id} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800">
-                            <div className="flex items-center gap-2">
-                              {/* // NEW - only Grey on-hold streets can enter bulk reassignment selection. */}
-                              {street.status === "on_hold" && (
-                                <Checkbox
-                                  checked={selectedOnHoldStreetIds.has(street.id)}
-                                  onCheckedChange={(checked) => setSelectedOnHoldStreetIds(prev => {
-                                    const next = new Set(prev);
-                                    checked ? next.add(street.id) : next.delete(street.id);
-                                    return next;
-                                  })}
-                                />
-                              )}
-                              <span className="text-sm text-gray-800 dark:text-gray-200">{street.nameEn}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-gray-400">{street.nameAr}</span>
-                              {/* // CHANGED - apply Red, Blue, Yellow, Green, and Grey assignment colors. */}
-                              <Badge variant="outline" className={`text-xs ${getStatusClassName(street.status)}`}>
-                                {street.status.replace("_", " ")}
-                              </Badge>
-                            </div>
+                        {district.assignments.length > 0 && (
+                          <div className="mb-3">
+                            <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Assignments ({district.assignments.length})</h5>
+                            {district.assignments.map((assignment) => (
+                              <div key={assignment.id} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800">
+                                <div className="flex items-center gap-2">
+                                  <Checkbox
+                                    checked={selectedAssignmentIds.has(assignment.id)}
+                                    onCheckedChange={(checked) => setSelectedAssignmentIds(prev => {
+                                      const next = new Set(prev);
+                                      checked ? next.add(assignment.id) : next.delete(assignment.id);
+                                      return next;
+                                    })}
+                                  />
+                                  <span className="text-sm text-gray-800 dark:text-gray-200">{assignment.streetNameEn}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-gray-500">{assignment.driverName}</span>
+                                  <Badge variant="outline" className={`text-xs ${getStatusClassName(assignment.status)}`}>
+                                    {assignment.status.replace("_", " ")}
+                                  </Badge>
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                        {district.streets.length === 0 && (
+                        )}
+                        {district.streets.filter(s => s.status === "not_assigned" || s.status === "on_hold").length > 0 && (
+                          <div>
+                            <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Streets</h5>
+                            {district.streets.filter(s => statusFilter === "on_hold" ? s.status === "on_hold" : true).map((street) => (
+                              <div key={street.id} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800">
+                                <div className="flex items-center gap-2">
+                                  {street.status === "on_hold" && (
+                                    <Checkbox
+                                      checked={selectedOnHoldStreetIds.has(street.id)}
+                                      onCheckedChange={(checked) => setSelectedOnHoldStreetIds(prev => {
+                                        const next = new Set(prev);
+                                        checked ? next.add(street.id) : next.delete(street.id);
+                                        return next;
+                                      })}
+                                    />
+                                  )}
+                                  <span className="text-sm text-gray-800 dark:text-gray-200">{street.nameEn}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-gray-400">{street.nameAr}</span>
+                                  <Badge variant="outline" className={`text-xs ${getStatusClassName(street.status)}`}>
+                                    {street.status.replace("_", " ")}
+                                  </Badge>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {district.streets.length === 0 && district.assignments.length === 0 && (
                           <p className="text-sm text-gray-400 text-center py-2">No streets loaded for this district</p>
                         )}
                       </div>
