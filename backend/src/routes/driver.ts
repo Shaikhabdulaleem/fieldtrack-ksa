@@ -1,11 +1,12 @@
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db";
-import { driverAssignments, streets, leads, leadPhotos, users, cities, districts, zones, driverCheckins } from "../db/schema";
+import { driverAssignments, streets, leads, leadPhotos, users, cities, districts, zones, driverCheckins, surveyZones } from "../db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth";
-import { upload, uploadFile } from "../services/upload.service";
+import { upload, uploadMedia, uploadFile } from "../services/upload.service";
 import { AppError } from "../middleware/error";
+import { sumGpsDistanceForZone, classifyZoneCompletion, syncSurveyZoneAssignmentState } from "../services/surveyZone.service";
 
 export const driverRouter = Router();
 
@@ -35,13 +36,30 @@ driverRouter.get("/driver/today", requireAuth, requireRole("driver"), async (req
       .where(and(eq(driverAssignments.driverId, driverId), eq(driverAssignments.assignedDate, today)));
 
     const [driver] = await db
-      .select({ fullName: users.fullName, cityId: users.cityId, cityName: cities.nameEn })
+      .select({
+        fullName: users.fullName,
+        cityId: users.cityId,
+        cityName: cities.nameEn,
+        petrolPerDriverPerDay: cities.petrolPerDriverPerDay,
+        targetLeadsPerDriver: cities.targetLeadsPerDriver,
+      })
       .from(users)
       .leftJoin(cities, eq(users.cityId, cities.id))
       .where(eq(users.id, driverId))
       .limit(1);
 
     const firstAssignment = assignments[0];
+
+    // District-Based Driver Survey Coverage Planner — today's assigned survey
+    // zone, if any (additive; the flat `streets` list above is unaffected).
+    const [surveyZoneRow] = await db.execute(sql`
+      SELECT sz.id, sz.label, sz.target_km, sz.status, d.name_en as district_name
+      FROM driver_assignments da
+      JOIN survey_zones sz ON da.survey_zone_id = sz.id
+      JOIN districts d ON sz.district_id = d.id
+      WHERE da.driver_id = ${driverId} AND da.assigned_date = ${today}
+      LIMIT 1
+    `);
 
     res.json({
       driverId,
@@ -53,6 +71,16 @@ driverRouter.get("/driver/today", requireAuth, requireRole("driver"), async (req
       date: today,
       targetStreets: assignments.length,
       streets: assignments,
+      surveyZone: surveyZoneRow ? {
+        id: String(surveyZoneRow.id),
+        label: String(surveyZoneRow.label),
+        districtName: String(surveyZoneRow.district_name),
+        targetKm: Number(surveyZoneRow.target_km),
+        status: String(surveyZoneRow.status),
+        requiredDate: today,
+        petrolAmount: Number(driver?.petrolPerDriverPerDay ?? 50),
+        expectedLeads: driver?.targetLeadsPerDriver ?? null,
+      } : null,
     });
   } catch (err) {
     next(err);
@@ -263,6 +291,120 @@ driverRouter.post("/streets/:id/visit", requireAuth, requireRole("driver"), asyn
     next(err);
   }
 });
+
+// ── District-Based Driver Survey Coverage Planner — zone start/complete ────────
+// Additive: the existing /streets/:id/visit flow above is completely
+// unaffected. These are rollup actions on top of it.
+
+// POST /api/v1/driver/survey-zones/:id/start
+driverRouter.post("/driver/survey-zones/:id/start", requireAuth, requireRole("driver"), async (req, res, next) => {
+  try {
+    const zoneId = req.params.id;
+    const today = new Date().toISOString().slice(0, 10);
+
+    const [assignment] = await db
+      .select({ id: driverAssignments.id })
+      .from(driverAssignments)
+      .where(and(
+        eq(driverAssignments.surveyZoneId, zoneId),
+        eq(driverAssignments.driverId, req.user!.sub),
+        eq(driverAssignments.assignedDate, today),
+      ))
+      .limit(1);
+    if (!assignment) throw new AppError(403, "This survey zone is not assigned to you today");
+
+    await db.transaction(async (tx) => {
+      await tx.update(driverAssignments)
+        .set({ status: "in_progress", startedAt: new Date() })
+        .where(and(eq(driverAssignments.surveyZoneId, zoneId), eq(driverAssignments.driverId, req.user!.sub)));
+      await tx.update(streets)
+        .set({ status: "in_progress" })
+        .where(eq(streets.surveyZoneId, zoneId));
+      await syncSurveyZoneAssignmentState(zoneId, tx);
+    });
+
+    res.json({ ok: true, zoneId, status: "in_progress" });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/v1/driver/survey-zones/:id/complete
+driverRouter.post(
+  "/driver/survey-zones/:id/complete",
+  requireAuth,
+  requireRole("driver"),
+  uploadMedia.fields([
+    { name: "photos", maxCount: 10 },
+    { name: "videos", maxCount: 5 },
+  ]),
+  async (req, res, next) => {
+    try {
+      const zoneId = req.params.id;
+      const today = new Date().toISOString().slice(0, 10);
+      const driverId = req.user!.sub;
+
+      const [zone] = await db.select().from(surveyZones).where(eq(surveyZones.id, zoneId)).limit(1);
+      if (!zone) throw new AppError(404, "Survey zone not found");
+      if (zone.assignedDriverId !== driverId) throw new AppError(403, "This survey zone is not assigned to you");
+      if (zone.assignedDate !== today) throw new AppError(400, "This survey zone is not assigned to you today");
+
+      const files = req.files as Record<string, Express.Multer.File[]>;
+      const photoFiles = files?.photos ?? [];
+      const videoFiles = files?.videos ?? [];
+
+      // GPS route is NOT re-submitted by the client — it's derived server-side
+      // from driver_location_pings, already captured throughout the day via
+      // the existing POST /tracking/ping (avoids a duplicate-source-of-truth
+      // GPS trail).
+      const [photoUrls, videoUrls] = await Promise.all([
+        Promise.all(photoFiles.map(f => uploadFile(f))),
+        Promise.all(videoFiles.map(f => uploadFile(f))),
+      ]);
+      const hasProof = photoUrls.length + videoUrls.length > 0;
+
+      const actualKm = await sumGpsDistanceForZone(driverId, today);
+      const targetKm = Number(zone.targetKm);
+      const classification = classifyZoneCompletion(actualKm, targetKm, hasProof);
+
+      await db.transaction(async (tx) => {
+        await tx.update(surveyZones).set({
+          actualKm: actualKm.toFixed(2),
+          status: classification.status,
+          verificationNotes: classification.notes,
+          proofPhotoUrls: photoUrls,
+          proofVideoUrls: videoUrls,
+          completedAt: new Date(),
+        }).where(eq(surveyZones.id, zoneId));
+
+        if (classification.status === "completed" || classification.status === "partially_completed") {
+          // Bulk-complete streets/assignments still in_progress; leave
+          // explicitly-skipped streets alone. rejected_needs_review leaves
+          // everything as-is for a city_manager to review manually.
+          await tx.update(streets)
+            .set({ status: "completed" })
+            .where(and(eq(streets.surveyZoneId, zoneId), eq(streets.status, "in_progress")));
+          await tx.update(driverAssignments)
+            .set({ status: "completed", completedAt: new Date() })
+            .where(and(eq(driverAssignments.surveyZoneId, zoneId), eq(driverAssignments.status, "in_progress")));
+        }
+      });
+
+      res.json({
+        zoneId,
+        status: classification.status,
+        actualKm,
+        targetKm,
+        ratio: targetKm > 0 ? Number((actualKm / targetKm).toFixed(2)) : 0,
+        verificationNotes: classification.notes,
+        photoCount: photoUrls.length,
+        videoCount: videoUrls.length,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 // POST /api/v1/sync/offline
 driverRouter.post("/sync/offline", requireAuth, requireRole("driver"), async (req, res, next) => {

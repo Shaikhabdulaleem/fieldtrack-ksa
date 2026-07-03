@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "streets_city_osm_uidx" ON "streets" USING btree ("city_id","osm_id") WHERE "streets"."osm_id" is not null;

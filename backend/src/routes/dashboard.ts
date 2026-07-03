@@ -4,6 +4,7 @@ import { cities, users, leads, streets, driverAssignments, driverLocationPings, 
 import { eq, and, sql, desc } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { AppError } from "../middleware/error";
+import { calcRealisticDriverDailyKm } from "../services/surveyZone.service";
 
 export const dashboardRouter = Router();
 
@@ -197,7 +198,10 @@ dashboardRouter.get("/cities/:id/planning", async (req, res, next) => {
         count(*) filter (where status = 'assigned') as assigned,
         count(*) filter (where status = 'in_progress') as in_progress,
         count(*) filter (where status = 'skipped') as skipped,
-        count(*) filter (where status = 'not_assigned') as unassigned
+        count(*) filter (where status = 'not_assigned') as unassigned,
+        coalesce(sum(length_km), 0) as total_road_km,
+        coalesce(sum(length_km) filter (where status in ('not_assigned','on_hold')), 0) as remaining_road_km,
+        coalesce(sum(length_km) filter (where status = 'completed'), 0) as completed_road_km
       FROM streets
       WHERE city_id = ${cityId}
     `);
@@ -225,7 +229,10 @@ dashboardRouter.get("/cities/:id/planning", async (req, res, next) => {
       ORDER BY z.name_en
     `);
 
-    const districtBreakdown = await db.execute(sql`
+    // Single-pass JOIN+GROUP BY (not per-district correlated subqueries — with
+    // 170 districts, 9 correlated subqueries each was ~1500 subquery scans and
+    // took 10+ seconds; this is one sequential scan + hash aggregate).
+    const districtStreetBreakdown = await db.execute(sql`
       SELECT
         d.id as district_id,
         d.name_en as district_name_en,
@@ -234,15 +241,68 @@ dashboardRouter.get("/cities/:id/planning", async (req, res, next) => {
         d.center_lat,
         d.center_lng,
         d.boundary,
-        (SELECT count(*) FROM streets WHERE district_id = d.id) as total_streets,
-        (SELECT count(*) FROM streets WHERE district_id = d.id AND status = 'completed') as completed_streets,
-        (SELECT count(*) FROM streets WHERE district_id = d.id AND status = 'assigned') as assigned_streets,
-        (SELECT count(*) FROM streets WHERE district_id = d.id AND status = 'in_progress') as in_progress_streets,
-        (SELECT count(*) FROM streets WHERE district_id = d.id AND status = 'not_assigned') as unassigned_streets
+        d.road_km,
+        count(s.id) as total_streets,
+        count(*) filter (where s.status = 'completed') as completed_streets,
+        count(*) filter (where s.status = 'assigned') as assigned_streets,
+        count(*) filter (where s.status = 'in_progress') as in_progress_streets,
+        count(*) filter (where s.status = 'not_assigned') as unassigned_streets,
+        coalesce(sum(s.length_km) filter (where s.status in ('not_assigned','on_hold')), 0) as remaining_road_km
       FROM districts d
+      LEFT JOIN streets s ON s.district_id = d.id
       WHERE d.city_id = ${cityId}
+      GROUP BY d.id, d.name_en, d.name_ar, d.zone_id, d.center_lat, d.center_lng, d.boundary, d.road_km
       ORDER BY d.name_en
     `);
+
+    // Separate aggregate (not joined to the streets query above) to avoid a
+    // Cartesian blow-up between the two LEFT JOINs.
+    const districtZoneCounts = await db.execute(sql`
+      SELECT
+        district_id,
+        count(*) as total_survey_zones,
+        count(*) filter (where status = 'not_assigned') as unassigned_survey_zones,
+        count(*) filter (where status IN ('completed','partially_completed')) as completed_survey_zones
+      FROM survey_zones
+      WHERE city_id = ${cityId}
+      GROUP BY district_id
+    `);
+    const zoneCountsByDistrict = new Map(districtZoneCounts.map(r => [String(r.district_id), r]));
+
+    const districtBreakdown = districtStreetBreakdown.map(d => {
+      const zoneCounts = zoneCountsByDistrict.get(String(d.district_id));
+      return {
+        ...d,
+        total_survey_zones: zoneCounts?.total_survey_zones ?? 0,
+        unassigned_survey_zones: zoneCounts?.unassigned_survey_zones ?? 0,
+        completed_survey_zones: zoneCounts?.completed_survey_zones ?? 0,
+      };
+    });
+
+    // ── District-Based Driver Survey Coverage Planner — dashboard cards ──────────
+    const activeDriverCount = cityDrivers.filter(d => d.is_active).length;
+    const dailyKm = calcRealisticDriverDailyKm(city);
+    const totalRoadKm = Number(streetStats?.total_road_km ?? 0);
+    const remainingRoadKm = Number(streetStats?.remaining_road_km ?? 0);
+    const completedRoadKm = Number(streetStats?.completed_road_km ?? 0);
+    const totalDailyTeamCapacity = activeDriverCount * dailyKm;
+    const [{ unassignedZones }] = await db.execute(sql`
+      SELECT count(*)::int as "unassignedZones" FROM survey_zones
+      WHERE city_id = ${cityId} AND status = 'not_assigned'
+    `);
+
+    const dashboardCards = {
+      totalDrivers: cityDrivers.length,
+      totalDistricts: districtBreakdown.length,
+      totalStreets: Number(streetStats?.total_streets ?? 0),
+      totalRoadKm,
+      driverDailyKmCapacity: dailyKm,
+      totalDailyTeamCapacity,
+      estimatedCompletionDays: totalDailyTeamCapacity > 0 ? Math.ceil(remainingRoadKm / totalDailyTeamCapacity) : 0,
+      assignedToday: Number(todayStats?.total_assigned_today ?? 0),
+      unassignedDistrictsOrZones: Number(unassignedZones ?? 0),
+      coveragePct: totalRoadKm > 0 ? Math.round((completedRoadKm / totalRoadKm) * 100) : 0,
+    };
 
     res.json({
       city,
@@ -251,6 +311,7 @@ dashboardRouter.get("/cities/:id/planning", async (req, res, next) => {
       todayStats: todayStats ?? {},
       zones: zoneBreakdown,
       districts: districtBreakdown,
+      dashboardCards,
       today,
     });
   } catch (err) {

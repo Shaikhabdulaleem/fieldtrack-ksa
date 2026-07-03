@@ -5,13 +5,13 @@ import { Card, CardContent } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import {
-  MapPin, Navigation, Check, X, Plus, ArrowLeft, Loader2
+  MapPin, Navigation, Check, X, Plus, ArrowLeft, Loader2, PlayCircle, Layers, Fuel, Target,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { toast } from "sonner";
 import { cn } from "../ui/utils";
-import { getDriverToday, visitStreet, sendPing } from "../../lib/api";
+import { getDriverToday, visitStreet, sendPing, startSurveyZone } from "../../lib/api";
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -63,6 +63,12 @@ export function DriverNavigation() {
   const watchIdRef = useRef<number | null>(null);
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // District-Based Driver Survey Coverage Planner — today's assigned survey
+  // zone context, if any. Purely additive: the flat street-by-street flow
+  // below is unaffected either way.
+  const [surveyZone, setSurveyZone] = useState<Record<string, unknown> | null>(null);
+  const [startingZone, setStartingZone] = useState(false);
+
   // Load today's assigned streets
   useEffect(() => {
     getDriverToday().then(data => {
@@ -90,8 +96,23 @@ export function DriverNavigation() {
 
       setStreets([...completedStreets, ...assignedStreets]);
       setCurrentIndex(completedStreets.length);
+      setSurveyZone((data.surveyZone as Record<string, unknown> | null) ?? null);
     }).catch(console.error).finally(() => setLoading(false));
   }, []);
+
+  const handleStartSurvey = useCallback(async () => {
+    if (!surveyZone?.id) return;
+    setStartingZone(true);
+    try {
+      await startSurveyZone(String(surveyZone.id));
+      setSurveyZone(prev => prev ? { ...prev, status: "in_progress" } : prev);
+      toast.success("Survey started — drive safely!");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to start survey");
+    } finally {
+      setStartingZone(false);
+    }
+  }, [surveyZone]);
 
   // Start GPS watching + background pinging
   useEffect(() => {
@@ -277,6 +298,52 @@ export function DriverNavigation() {
           )}
         </div>
       </div>
+
+      {/* District-Based Driver Survey Coverage Planner — zone context banner */}
+      {surveyZone && (
+        <div className="bg-blue-600 text-white px-4 py-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <Layers className="w-5 h-5 shrink-0" />
+              <div>
+                <p className="font-semibold text-sm">
+                  {String(surveyZone.label ?? "Survey Zone")} — {String(surveyZone.districtName ?? "")}
+                </p>
+                <div className="flex items-center gap-3 text-xs text-blue-100 mt-0.5">
+                  <span className="flex items-center gap-1"><Target className="w-3 h-3" /> {Number(surveyZone.targetKm ?? 0).toFixed(1)} km target</span>
+                  {surveyZone.petrolAmount != null && (
+                    <span className="flex items-center gap-1"><Fuel className="w-3 h-3" /> {Number(surveyZone.petrolAmount)} SAR</span>
+                  )}
+                  {surveyZone.expectedLeads != null && <span>{Number(surveyZone.expectedLeads)} expected leads</span>}
+                </div>
+              </div>
+            </div>
+            {surveyZone.status === "assigned" && (
+              <Button size="sm" variant="secondary" onClick={handleStartSurvey} disabled={startingZone}>
+                {startingZone ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <PlayCircle className="w-4 h-4 mr-1.5" />}
+                Start Survey
+              </Button>
+            )}
+            {surveyZone.status === "in_progress" && streets.length > 0 && streets.every(s => s.status === "completed" || s.status === "skipped") && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => navigate("/driver/survey-complete", {
+                  state: {
+                    zoneId: String(surveyZone.id),
+                    label: String(surveyZone.label ?? ""),
+                    targetKm: Number(surveyZone.targetKm ?? 0),
+                    districtName: String(surveyZone.districtName ?? ""),
+                  },
+                })}
+              >
+                <Check className="w-4 h-4 mr-1.5" />
+                Complete Task
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Current Street Info */}
       {currentStreet && currentIndex < streets.length && (

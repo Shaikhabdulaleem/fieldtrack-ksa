@@ -18,6 +18,7 @@ import { DriverLogin } from "./components/driver/DriverLogin";
 import { DriverHome } from "./components/driver/DriverHome";
 import { DriverCheckIn } from "./components/driver/DriverCheckIn";
 import { DriverNavigation } from "./components/driver/DriverNavigation";
+import { SurveyZoneComplete } from "./components/driver/SurveyZoneComplete";
 import { LeadForm } from "./components/driver/LeadForm";
 import { OfflineSync } from "./components/driver/OfflineSync";
 import { Settings } from "./components/Settings";
@@ -109,6 +110,7 @@ export const router = createBrowserRouter([
           { path: "home", Component: DriverHome },
           { path: "check-in", Component: DriverCheckIn },
           { path: "navigation", Component: DriverNavigation },
+          { path: "survey-complete", Component: SurveyZoneComplete },
           { path: "lead-form", Component: LeadForm },
           { path: "sync", Component: OfflineSync },
           { path: "settings", Component: Settings },

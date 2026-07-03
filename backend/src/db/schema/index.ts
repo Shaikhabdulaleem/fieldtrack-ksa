@@ -9,3 +9,4 @@ export * from "./lead_photos";
 export * from "./tracking";
 export * from "./activity_logs";
 export * from "./checkins";
+export * from "./surveyZones";

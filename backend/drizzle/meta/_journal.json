@@ -29,6 +29,20 @@
       "when": 1782830054774,
       "tag": "0003_minor_scrambler",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1782987844642,
+      "tag": "0004_wakeful_doctor_octopus",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1782988157316,
+      "tag": "0005_overjoyed_jack_murdock",
+      "breakpoints": true
     }
   ]
 }

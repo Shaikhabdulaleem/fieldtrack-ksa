@@ -26,6 +26,25 @@ export const upload = multer({
   },
 });
 
+// ── Multer — photo + video, for survey zone completion proof uploads only ──────
+// Separate instance so the image-only `upload` above (check-in/lead-form) is
+// never loosened.
+export const uploadMedia = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB (videos)
+  fileFilter: (_req, file, cb) => {
+    const allowedMimes = [
+      "image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/gif",
+      "video/mp4", "video/quicktime", "video/webm",
+    ];
+    const allowedExts = [".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".gif", ".mp4", ".mov", ".webm"];
+    const ext = path.extname(file.originalname).toLowerCase();
+    const ok = allowedMimes.includes(file.mimetype) && (ext === "" || allowedExts.includes(ext));
+    if (!ok) console.warn(`[upload] Rejected media file: mimetype=${file.mimetype} ext=${ext} name=${file.originalname}`);
+    cb(null, ok);
+  },
+});
+
 // ── Upload a single file to Supabase Storage ─────────────────────────────────
 /**
  * Uploads one multer in-memory file to the Supabase bucket and returns its

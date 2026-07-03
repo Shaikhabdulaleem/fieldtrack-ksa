@@ -11,6 +11,9 @@ export const districts = pgTable("districts", {
   centerLat: numeric("center_lat", { precision: 10, scale: 7 }),
   centerLng: numeric("center_lng", { precision: 10, scale: 7 }),
   boundary: jsonb("boundary"),
+  // Cached sum of streets.length_km for this district — refreshed after
+  // ingestion/re-splits by recomputeDistrictRoadKm(). NULL = not yet computed.
+  roadKm: numeric("road_km", { precision: 8, scale: 3 }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 

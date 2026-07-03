@@ -91,8 +91,18 @@ citiesRouter.patch("/cities/:id", requireAuth, requireRole("super_admin", "city_
       targetDays: z.number().int().min(1).optional(),
       targetLeadsPerDriver: z.number().int().min(0).optional(),
       maxStreetsPerDriver: z.number().int().min(1).optional(),
+      // District-Based Driver Survey Coverage Planner inputs
+      petrolPerDriverPerDay: z.number().min(0).optional(),
+      petrolPricePerLiter: z.number().gt(0).optional(),
+      avgCarMileageKmPerLiter: z.number().min(0).optional(),
+      surveyEfficiencyPct: z.number().int().min(0).max(100).optional(),
     });
-    const data = schema.parse(req.body);
+    const { petrolPerDriverPerDay, petrolPricePerLiter, avgCarMileageKmPerLiter, ...rest } = schema.parse(req.body);
+    const data: Record<string, unknown> = { ...rest };
+    // numeric() columns are typed as string in drizzle — convert explicitly.
+    if (petrolPerDriverPerDay !== undefined) data.petrolPerDriverPerDay = petrolPerDriverPerDay.toFixed(2);
+    if (petrolPricePerLiter !== undefined) data.petrolPricePerLiter = petrolPricePerLiter.toFixed(2);
+    if (avgCarMileageKmPerLiter !== undefined) data.avgCarMileageKmPerLiter = avgCarMileageKmPerLiter.toFixed(2);
     const [city] = await db
       .update(cities)
       .set(data)
@@ -155,6 +165,26 @@ citiesRouter.get("/districts/:id/streets", requireAuth, async (req, res, next) =
       .from(streets)
       .where(eq(streets.districtId, req.params.id))
       .orderBy(streets.nameEn);
+    res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/v1/districts/:id/survey-zones — District-Based Driver Survey
+// Coverage Planner's capacity-based zones for this district (distinct from
+// the geographic `zones` table).
+citiesRouter.get("/districts/:id/survey-zones", requireAuth, async (req, res, next) => {
+  try {
+    const rows = await db.execute(sql`
+      SELECT sz.*, u.full_name as assigned_driver_name,
+        (SELECT count(*)::int FROM streets WHERE survey_zone_id = sz.id) as street_count,
+        (SELECT count(*)::int FROM streets WHERE survey_zone_id = sz.id AND status = 'completed') as completed_street_count
+      FROM survey_zones sz
+      LEFT JOIN users u ON sz.assigned_driver_id = u.id
+      WHERE sz.district_id = ${req.params.id}
+      ORDER BY sz.label
+    `);
     res.json(rows);
   } catch (err) {
     next(err);

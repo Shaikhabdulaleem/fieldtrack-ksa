@@ -372,6 +372,61 @@ export async function reassignDistrict(data: { districtId: string; newDriverId: 
   });
 }
 
+// ── District-Based Driver Survey Coverage Planner ───────────────────────────
+export async function calculatePlanKm(data: {
+  cityId: string;
+  targetDays: number;
+  numberOfDrivers: number;
+  petrolPerDriverPerDay: number;
+  petrolPricePerLiter: number;
+  avgCarMileageKmPerLiter: number;
+  surveyEfficiencyPct: number;
+  targetLeadsPerDriver: number;
+}) {
+  return request<Record<string, unknown>>("/assignments/calculate-plan-km", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function splitDistrict(cityId: string, districtId: string) {
+  return request<{ created: number; zones: Record<string, unknown>[] }>("/assignments/split-district", {
+    method: "POST",
+    body: JSON.stringify({ cityId, districtId }),
+  });
+}
+
+export async function autoAssignZones(cityId: string, date?: string) {
+  return request<Record<string, unknown>>("/assignments/auto-assign-zones", {
+    method: "POST",
+    body: JSON.stringify({ cityId, date }),
+  });
+}
+
+export async function assignSurveyZone(data: { zoneId: string; driverId: string; date?: string }) {
+  return request<{ created: number }>("/assignments/assign-survey-zone", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getDistrictSurveyZones(districtId: string) {
+  return request<Record<string, unknown>[]>(`/districts/${districtId}/survey-zones`);
+}
+
+export async function startSurveyZone(zoneId: string) {
+  return request<Record<string, unknown>>(`/driver/survey-zones/${zoneId}/start`, {
+    method: "POST",
+  });
+}
+
+export async function completeSurveyZone(zoneId: string, formData: FormData) {
+  return request<Record<string, unknown>>(`/driver/survey-zones/${zoneId}/complete`, {
+    method: "POST",
+    body: formData,
+  });
+}
+
 // NEW - bulk reassign selected Grey on-hold streets to an active same-city Driver.
 export async function reassignOnHoldStreets(data: { streetIds: string[]; newDriverId: string }) {
   return request<{ updated: number }>("/assignments/reassign-on-hold", {

@@ -13,10 +13,12 @@
     "migrate:run": "ts-node src/db/migrate.ts",
     "studio": "drizzle-kit studio",
     "seed": "ts-node src/db/seed.ts",
+    "seed:streets": "ts-node src/db/seed-streets.ts",
     "deploy": "npm run build && npm run migrate:run && npm run start:pm2"
   },
   "dependencies": {
     "@supabase/storage-js": "^2.109.0",
+    "@turf/turf": "^7.3.5",
     "bcryptjs": "^2.4.3",
     "compression": "^1.7.4",
     "cors": "^2.8.5",

@@ -1,10 +1,16 @@
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db";
-import { driverAssignments, streets, users, districts } from "../db/schema";
+import { driverAssignments, streets, users, districts, cities, surveyZones } from "../db/schema";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { AppError } from "../middleware/error";
+import {
+  calcRealisticDriverDailyKm,
+  districtRecommendation,
+  splitDistrictStreetsIntoZoneRows,
+  syncSurveyZoneAssignmentState,
+} from "../services/surveyZone.service";
 
 export const assignmentsRouter = Router();
 
@@ -424,6 +430,273 @@ assignmentsRouter.post("/assignments/auto-plan", requireAuth, requireRole("super
       streetsPerDriver: cap,
       remainingUnassigned: distWithCoords.reduce((s, d) => s + d.streetCount, 0) - rows.length,
       assignedDistricts: uniqueDistricts,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── District-Based Driver Survey Coverage Planner (road-km-based) ──────────────
+// New endpoints below are additive — calculate-plan and auto-plan above are
+// left completely untouched so other cities keep working on the legacy
+// street-count-based flow.
+
+// POST /api/v1/assignments/assign-survey-zone — manual per-zone override,
+// alongside auto-assign-zones. Mirrors assign-district's pattern.
+assignmentsRouter.post("/assignments/assign-survey-zone", requireAuth, requireRole("super_admin", "city_manager"), async (req, res, next) => {
+  try {
+    const { zoneId, driverId, date } = z.object({
+      zoneId: z.string().uuid(),
+      driverId: z.string().uuid(),
+      date: z.string().optional(),
+    }).parse(req.body);
+
+    const [zone] = await db.select().from(surveyZones).where(eq(surveyZones.id, zoneId)).limit(1);
+    if (!zone) throw new AppError(404, "Survey zone not found");
+
+    const zoneStreets = await db
+      .select({ id: streets.id })
+      .from(streets)
+      .where(eq(streets.surveyZoneId, zoneId));
+    if (!zoneStreets.length) {
+      return res.json({ created: 0, message: "This zone has no streets" });
+    }
+
+    const assignedDate = date ?? new Date().toISOString().slice(0, 10);
+    await db.transaction(async (tx) => {
+      // Replace any existing (e.g. previously auto-assigned) assignments for
+      // this zone before creating fresh ones for the new driver.
+      await tx.delete(driverAssignments).where(eq(driverAssignments.surveyZoneId, zoneId));
+      await tx.insert(driverAssignments).values(zoneStreets.map(s => ({
+        cityId: zone.cityId,
+        driverId,
+        districtId: zone.districtId,
+        streetId: s.id,
+        surveyZoneId: zoneId,
+        assignedBy: req.user!.sub,
+        assignedDate,
+      })));
+      await tx.update(streets).set({ status: "assigned" }).where(inArray(streets.id, zoneStreets.map(s => s.id)));
+      await syncSurveyZoneAssignmentState(zoneId, tx);
+    });
+
+    res.status(201).json({ created: zoneStreets.length });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/v1/assignments/calculate-plan-km
+assignmentsRouter.post("/assignments/calculate-plan-km", requireAuth, requireRole("super_admin", "city_manager"), async (req, res, next) => {
+  try {
+    const body = z.object({
+      cityId: z.string().uuid(),
+      targetDays: z.number().int().min(1),
+      numberOfDrivers: z.number().int().min(1),
+      petrolPerDriverPerDay: z.number().min(0),
+      petrolPricePerLiter: z.number().gt(0),
+      avgCarMileageKmPerLiter: z.number().min(0),
+      surveyEfficiencyPct: z.number().int().min(0).max(100),
+      targetLeadsPerDriver: z.number().int().min(0),
+    }).parse(req.body);
+
+    const dailyKm = calcRealisticDriverDailyKm(body);
+
+    const [cityRoadStats] = await db.execute(sql`
+      SELECT
+        coalesce(sum(length_km), 0) as total_road_km,
+        coalesce(sum(length_km) filter (where status in ('not_assigned','on_hold')), 0) as remaining_road_km,
+        coalesce(sum(length_km) filter (where status = 'completed'), 0) as completed_road_km,
+        count(*) as total_streets
+      FROM streets WHERE city_id = ${body.cityId}
+    `);
+
+    const [{ totalDistricts }] = await db
+      .select({ totalDistricts: sql<number>`count(*)::int` })
+      .from(districts)
+      .where(eq(districts.cityId, body.cityId));
+
+    const totalRoadKm = Number(cityRoadStats.total_road_km);
+    const remainingRoadKm = Number(cityRoadStats.remaining_road_km);
+    const completedRoadKm = Number(cityRoadStats.completed_road_km);
+    const totalStreets = Number(cityRoadStats.total_streets);
+
+    const totalDailyTeamCapacity = body.numberOfDrivers * dailyKm;
+    const estimatedCompletionDays = totalDailyTeamCapacity > 0 ? Math.ceil(remainingRoadKm / totalDailyTeamCapacity) : 0;
+    const feasible = estimatedCompletionDays <= body.targetDays;
+    const driversNeeded = (body.targetDays > 0 && dailyKm > 0) ? Math.ceil(remainingRoadKm / (body.targetDays * dailyKm)) : 0;
+    const shortfall = Math.max(0, driversNeeded - body.numberOfDrivers);
+    const expectedTotalLeads = body.numberOfDrivers * body.targetLeadsPerDriver * body.targetDays;
+    const coveragePct = totalRoadKm > 0 ? Math.round((completedRoadKm / totalRoadKm) * 100) : 0;
+
+    const districtRows = await db.execute(sql`
+      SELECT d.id as district_id, d.name_en,
+        coalesce(sum(s.length_km), 0) as road_km,
+        coalesce(sum(s.length_km) filter (where s.status in ('not_assigned','on_hold')), 0) as remaining_km
+      FROM districts d
+      LEFT JOIN streets s ON s.district_id = d.id
+      WHERE d.city_id = ${body.cityId}
+      GROUP BY d.id, d.name_en
+      HAVING coalesce(sum(s.length_km), 0) > 0
+      ORDER BY road_km DESC
+    `);
+
+    const districtsOut = districtRows.map(r => {
+      const remainingKm = Number(r.remaining_km);
+      const rec = districtRecommendation(remainingKm, dailyKm);
+      return {
+        districtId: String(r.district_id),
+        nameEn: String(r.name_en),
+        roadKm: Number(r.road_km),
+        remainingKm,
+        requiredDriverDays: rec.requiredDriverDays,
+        requiredDrivers: rec.requiredDrivers,
+        recommendation: rec.message,
+        needsSplit: rec.needsSplit,
+      };
+    });
+
+    res.json({
+      realisticDriverDailyKm: dailyKm,
+      totalRoadKm,
+      remainingRoadKm,
+      totalDrivers: body.numberOfDrivers,
+      totalDistricts,
+      totalStreets,
+      driverDailyKmCapacity: dailyKm,
+      totalDailyTeamCapacity,
+      estimatedCompletionDays,
+      feasible,
+      driversNeeded,
+      shortfall,
+      expectedTotalLeads,
+      coveragePct,
+      districts: districtsOut,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/v1/assignments/split-district — divides a district's remaining
+// streets into daily-capacity-sized survey_zones. Idempotent.
+assignmentsRouter.post("/assignments/split-district", requireAuth, requireRole("super_admin", "city_manager"), async (req, res, next) => {
+  try {
+    const { cityId, districtId } = z.object({
+      cityId: z.string().uuid(),
+      districtId: z.string().uuid(),
+    }).parse(req.body);
+
+    const [city] = await db.select().from(cities).where(eq(cities.id, cityId)).limit(1);
+    if (!city) throw new AppError(404, "City not found");
+
+    const dailyKm = calcRealisticDriverDailyKm(city);
+    const created = await splitDistrictStreetsIntoZoneRows(cityId, districtId, dailyKm);
+
+    res.status(201).json({ created: created.length, zones: created });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/v1/assignments/auto-assign-zones — km-aware evolution of
+// auto-plan above: bin-packs survey_zones onto drivers without exceeding
+// each driver's realistic daily km capacity. Still creates one
+// driverAssignments row per street (with surveyZoneId set) so the existing
+// driver "today"/GPS/street-visit flow keeps working unchanged.
+assignmentsRouter.post("/assignments/auto-assign-zones", requireAuth, requireRole("super_admin", "city_manager"), async (req, res, next) => {
+  try {
+    const { cityId, date } = z.object({
+      cityId: z.string().uuid(),
+      date: z.string().optional(),
+    }).parse(req.body);
+
+    const [city] = await db.select().from(cities).where(eq(cities.id, cityId)).limit(1);
+    if (!city) throw new AppError(404, "City not found");
+    const dailyKm = calcRealisticDriverDailyKm(city);
+
+    const activeDrivers = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.cityId, cityId), eq(users.role, "driver"), eq(users.isActive, true)));
+    if (!activeDrivers.length) throw new AppError(400, "No active drivers in this city");
+
+    // Auto-split any district that still has remaining, unzoned, length-tagged streets.
+    const districtsWithUnzonedStreets = await db.execute(sql`
+      SELECT DISTINCT district_id FROM streets
+      WHERE city_id = ${cityId} AND status IN ('not_assigned','on_hold')
+        AND survey_zone_id IS NULL AND length_km IS NOT NULL AND district_id IS NOT NULL
+    `);
+    for (const row of districtsWithUnzonedStreets) {
+      if (row.district_id) await splitDistrictStreetsIntoZoneRows(cityId, String(row.district_id), dailyKm);
+    }
+
+    // Largest-first bin-packing onto drivers' remaining daily km capacity.
+    const pendingZones = await db
+      .select({ id: surveyZones.id, districtId: surveyZones.districtId, targetKm: surveyZones.targetKm })
+      .from(surveyZones)
+      .where(and(eq(surveyZones.cityId, cityId), eq(surveyZones.status, "not_assigned")))
+      .orderBy(sql`target_km desc`);
+
+    const assignDate = date ?? new Date().toISOString().slice(0, 10);
+    const driverRemainingKm = new Map(activeDrivers.map(d => [d.id, dailyKm]));
+    let zonesAssigned = 0;
+    const driversUsed = new Set<string>();
+
+    for (const zone of pendingZones) {
+      const zoneKm = Number(zone.targetKm);
+
+      let bestDriverId: string | null = null;
+      let bestRemaining = -1;
+      for (const [driverId, remaining] of driverRemainingKm) {
+        if (remaining >= zoneKm && remaining > bestRemaining) {
+          bestDriverId = driverId;
+          bestRemaining = remaining;
+        }
+      }
+      if (!bestDriverId) continue; // no driver has room left this round — leave not_assigned
+
+      const zoneStreets = await db
+        .select({ id: streets.id })
+        .from(streets)
+        .where(eq(streets.surveyZoneId, zone.id));
+
+      const assignedDriverId = bestDriverId;
+      await db.transaction(async (tx) => {
+        if (zoneStreets.length) {
+          await tx.insert(driverAssignments).values(zoneStreets.map(s => ({
+            cityId,
+            driverId: assignedDriverId,
+            districtId: zone.districtId,
+            streetId: s.id,
+            surveyZoneId: zone.id,
+            assignedBy: req.user!.sub,
+            assignedDate: assignDate,
+          })));
+          await tx.update(streets).set({ status: "assigned" }).where(inArray(streets.id, zoneStreets.map(s => s.id)));
+        }
+        await syncSurveyZoneAssignmentState(zone.id, tx);
+      });
+
+      driverRemainingKm.set(bestDriverId, bestRemaining - zoneKm);
+      driversUsed.add(bestDriverId);
+      zonesAssigned++;
+    }
+
+    const [remainingRoadKmRow] = await db.execute(sql`
+      SELECT coalesce(sum(length_km),0) as remaining_km FROM streets
+      WHERE city_id = ${cityId} AND status IN ('not_assigned','on_hold')
+    `);
+    const remainingRoadKm = Number(remainingRoadKmRow.remaining_km);
+    const estimatedProjectDays = (activeDrivers.length > 0 && dailyKm > 0)
+      ? Math.ceil(remainingRoadKm / (activeDrivers.length * dailyKm))
+      : 0;
+
+    res.status(201).json({
+      zonesAssigned,
+      driversUsed: driversUsed.size,
+      unassignedZones: pendingZones.length - zonesAssigned,
+      estimatedProjectDays,
     });
   } catch (err) {
     next(err);
