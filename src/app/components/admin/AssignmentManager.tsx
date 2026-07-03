@@ -241,20 +241,6 @@ export function AssignmentManager() {
     }
   };
 
-  const allAssignmentIds = visibleZones.flatMap(z => z.districts.flatMap(d => d.assignments.map(a => a.id)));
-
-  const toggleSelectAllAssignments = (checked: boolean) => {
-    setSelectedAssignmentIds(checked ? new Set(allAssignmentIds) : new Set());
-  };
-
-  const toggleDistrictAssignments = (district: DistrictData, checked: boolean) => {
-    setSelectedAssignmentIds(prev => {
-      const next = new Set(prev);
-      district.assignments.forEach(a => checked ? next.add(a.id) : next.delete(a.id));
-      return next;
-    });
-  };
-
   const toggleZone = (id: string) => {
     setExpandedZones(prev => {
       const next = new Set(prev);
@@ -287,6 +273,20 @@ export function AssignmentManager() {
         }))
         .filter(zone => zone.districts.length > 0);
   const visibleOnHoldStreetIds = visibleZones.flatMap(zone => zone.districts.flatMap(district => district.streets.map(street => street.id)));
+
+  const allAssignmentIds = visibleZones.flatMap(z => z.districts.flatMap(d => d.assignments.map(a => a.id)));
+
+  const toggleSelectAllAssignments = (checked: boolean) => {
+    setSelectedAssignmentIds(checked ? new Set(allAssignmentIds) : new Set());
+  };
+
+  const toggleDistrictAssignments = (district: DistrictData, checked: boolean) => {
+    setSelectedAssignmentIds(prev => {
+      const next = new Set(prev);
+      district.assignments.forEach(a => checked ? next.add(a.id) : next.delete(a.id));
+      return next;
+    });
+  };
 
   // NEW - enforce the requested assignment colors without changing unrelated statuses.
   const getStatusClassName = (status: string) => {
@@ -338,6 +338,7 @@ export function AssignmentManager() {
                 onValueChange={(value) => {
                   setStatusFilter(value as "all" | "on_hold");
                   setSelectedOnHoldStreetIds(new Set());
+                  setSelectedAssignmentIds(new Set());
                   setBulkDriverId("");
                 }}
               >
@@ -413,7 +414,11 @@ export function AssignmentManager() {
               {selectedAssignmentIds.size > 0 && (
                 <Button
                   variant="destructive"
-                  onClick={() => void handleBulkDelete()}
+                  onClick={() => {
+                    if (window.confirm(`Delete ${selectedAssignmentIds.size} assignment(s)? This cannot be undone.`)) {
+                      void handleBulkDelete();
+                    }
+                  }}
                   disabled={bulkDeleting}
                 >
                   {bulkDeleting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}

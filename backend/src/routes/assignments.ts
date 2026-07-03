@@ -141,7 +141,15 @@ assignmentsRouter.post("/assignments/bulk-delete", requireAuth, requireRole("sup
 
       const streetIds = rows.map(r => r.streetId).filter(Boolean) as string[];
       if (streetIds.length) {
-        await tx.update(streets).set({ status: "not_assigned" }).where(inArray(streets.id, streetIds));
+        const stillAssigned = await tx
+          .select({ streetId: driverAssignments.streetId })
+          .from(driverAssignments)
+          .where(inArray(driverAssignments.streetId, streetIds));
+        const stillAssignedSet = new Set(stillAssigned.map(r => r.streetId));
+        const orphanedStreetIds = streetIds.filter(id => !stillAssignedSet.has(id));
+        if (orphanedStreetIds.length) {
+          await tx.update(streets).set({ status: "not_assigned" }).where(inArray(streets.id, orphanedStreetIds));
+        }
       }
 
       const affectedZoneIds = [...new Set(rows.map(r => r.surveyZoneId).filter(Boolean) as string[])];
@@ -671,9 +679,11 @@ assignmentsRouter.post("/assignments/auto-assign-zones", requireAuth, requireRol
       WHERE city_id = ${cityId} AND status IN ('not_assigned','on_hold')
         AND survey_zone_id IS NULL AND length_km IS NOT NULL AND district_id IS NOT NULL
     `);
-    for (const row of districtsWithUnzonedStreets) {
-      if (row.district_id) await splitDistrictStreetsIntoZoneRows(cityId, String(row.district_id), dailyKm);
-    }
+    await Promise.all(
+      districtsWithUnzonedStreets
+        .filter(row => row.district_id)
+        .map(row => splitDistrictStreetsIntoZoneRows(cityId, String(row.district_id), dailyKm))
+    );
 
     // Largest-first bin-packing onto drivers' remaining daily km capacity.
     const pendingZones = await db
@@ -687,6 +697,25 @@ assignmentsRouter.post("/assignments/auto-assign-zones", requireAuth, requireRol
     let zonesAssigned = 0;
     const driversUsed = new Set<string>();
 
+    // Batch-fetch every pending zone's streets in one query instead of one
+    // query per zone, then group them in memory.
+    const allZoneStreets = pendingZones.length
+      ? await db
+          .select({ id: streets.id, surveyZoneId: streets.surveyZoneId })
+          .from(streets)
+          .where(inArray(streets.surveyZoneId, pendingZones.map(z => z.id)))
+      : [];
+    const streetsByZone = new Map<string, string[]>();
+    for (const s of allZoneStreets) {
+      if (!s.surveyZoneId) continue;
+      const list = streetsByZone.get(s.surveyZoneId) ?? [];
+      list.push(s.id);
+      streetsByZone.set(s.surveyZoneId, list);
+    }
+
+    // Largest-first bin-packing is pure in-memory bookkeeping — resolve every
+    // zone's driver assignment first, then run the DB writes concurrently.
+    const zoneAssignments: Array<{ zoneId: string; districtId: string | null; driverId: string; streetIds: string[] }> = [];
     for (const zone of pendingZones) {
       const zoneKm = Number(zone.targetKm);
 
@@ -700,32 +729,34 @@ assignmentsRouter.post("/assignments/auto-assign-zones", requireAuth, requireRol
       }
       if (!bestDriverId) continue; // no driver has room left this round — leave not_assigned
 
-      const zoneStreets = await db
-        .select({ id: streets.id })
-        .from(streets)
-        .where(eq(streets.surveyZoneId, zone.id));
-
-      const assignedDriverId = bestDriverId;
-      await db.transaction(async (tx) => {
-        if (zoneStreets.length) {
-          await tx.insert(driverAssignments).values(zoneStreets.map(s => ({
-            cityId,
-            driverId: assignedDriverId,
-            districtId: zone.districtId,
-            streetId: s.id,
-            surveyZoneId: zone.id,
-            assignedBy: req.user!.sub,
-            assignedDate: assignDate,
-          })));
-          await tx.update(streets).set({ status: "assigned" }).where(inArray(streets.id, zoneStreets.map(s => s.id)));
-        }
-        await syncSurveyZoneAssignmentState(zone.id, tx);
+      zoneAssignments.push({
+        zoneId: zone.id,
+        districtId: zone.districtId,
+        driverId: bestDriverId,
+        streetIds: streetsByZone.get(zone.id) ?? [],
       });
-
       driverRemainingKm.set(bestDriverId, bestRemaining - zoneKm);
       driversUsed.add(bestDriverId);
       zonesAssigned++;
     }
+
+    await Promise.all(zoneAssignments.map(({ zoneId, districtId, driverId, streetIds }) =>
+      db.transaction(async (tx) => {
+        if (streetIds.length) {
+          await tx.insert(driverAssignments).values(streetIds.map(streetId => ({
+            cityId,
+            driverId,
+            districtId,
+            streetId,
+            surveyZoneId: zoneId,
+            assignedBy: req.user!.sub,
+            assignedDate: assignDate,
+          })));
+          await tx.update(streets).set({ status: "assigned" }).where(inArray(streets.id, streetIds));
+        }
+        await syncSurveyZoneAssignmentState(zoneId, tx);
+      })
+    ));
 
     const [remainingRoadKmRow] = await db.execute(sql`
       SELECT coalesce(sum(length_km),0) as remaining_km FROM streets
