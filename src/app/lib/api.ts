@@ -407,7 +407,7 @@ export async function autoAssignZones(cityId: string, date?: string) {
   return request<Record<string, unknown>>("/assignments/auto-assign-zones", {
     method: "POST",
     body: JSON.stringify({ cityId, date }),
-  });
+  }, 60000);
 }
 
 export async function assignSurveyZone(data: { zoneId: string; driverId: string; date?: string }) {

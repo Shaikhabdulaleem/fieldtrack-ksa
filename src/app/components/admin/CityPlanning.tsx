@@ -235,6 +235,131 @@ function DistrictCoverageMap({ data, onSplitDistrict, onViewZones, splittingDist
   );
 }
 
+type ForecastDay = { day: number; date: string; districts: { name: string; km: number }[]; totalKm: number };
+
+// Projects, on the fly, which districts would be worked each remaining day
+// given today's saved daily team capacity. Nothing here is persisted or
+// actually assigned — real assignments still only happen via "Generate Today".
+function computeRemainingPlanForecast(
+  districts: Record<string, unknown>[],
+  dailyCapacityKm: number,
+  todayStr: string | undefined,
+): ForecastDay[] {
+  const items = districts
+    .map(d => ({
+      nameEn: String(d.district_name_en),
+      remainingKm: d.remaining_road_km !== null && d.remaining_road_km !== undefined ? Number(d.remaining_road_km) : null,
+    }))
+    .filter((d): d is { nameEn: string; remainingKm: number } => d.remainingKm !== null && d.remainingKm > 0.01)
+    .sort((a, b) => b.remainingKm - a.remainingKm);
+
+  if (dailyCapacityKm <= 0.01 || items.length === 0) return [];
+
+  const days: ForecastDay[] = [];
+  const baseDate = todayStr ? new Date(todayStr) : new Date();
+  let dayNum = 1;
+  let capacityLeft = dailyCapacityKm;
+  let currentDayDistricts: { name: string; km: number }[] = [];
+  let currentDayTotal = 0;
+
+  const pushDay = () => {
+    if (currentDayDistricts.length === 0) return;
+    const d = new Date(baseDate);
+    d.setDate(d.getDate() + (dayNum - 1));
+    days.push({ day: dayNum, date: d.toISOString().slice(0, 10), districts: currentDayDistricts, totalKm: currentDayTotal });
+    dayNum++;
+    capacityLeft = dailyCapacityKm;
+    currentDayDistricts = [];
+    currentDayTotal = 0;
+  };
+
+  const MAX_DAYS = 90;
+  for (const item of items) {
+    let remaining = item.remainingKm;
+    while (remaining > 0.01 && days.length < MAX_DAYS) {
+      if (capacityLeft <= 0.01) pushDay();
+      const take = Math.min(remaining, capacityLeft);
+      const existing = currentDayDistricts.find(x => x.name === item.nameEn);
+      if (existing) existing.km += take;
+      else currentDayDistricts.push({ name: item.nameEn, km: take });
+      currentDayTotal += take;
+      capacityLeft -= take;
+      remaining -= take;
+    }
+    if (days.length >= MAX_DAYS) break;
+  }
+  pushDay();
+  return days;
+}
+
+function RemainingPlanForecast({ districts, dailyCapacityKm, today }: {
+  districts: Record<string, unknown>[];
+  dailyCapacityKm: number;
+  today: string | undefined;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const forecast = computeRemainingPlanForecast(districts, dailyCapacityKm, today);
+  const VISIBLE = 5;
+  const visibleDays = expanded ? forecast : forecast.slice(0, VISIBLE);
+  const hiddenCount = forecast.length - visibleDays.length;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Calendar className="w-5 h-5" />
+          Remaining Days Plan
+        </CardTitle>
+        <p className="text-xs text-gray-500">
+          Projected schedule based on current daily team capacity ({dailyCapacityKm.toFixed(1)} km/day). Actual driver
+          assignments still happen day by day via "Generate Today".
+        </p>
+      </CardHeader>
+      <CardContent>
+        {dailyCapacityKm <= 0.01 ? (
+          <p className="text-center text-gray-500 py-4 text-sm">
+            No active drivers to project capacity. Add drivers to see the remaining-days plan.
+          </p>
+        ) : forecast.length === 0 ? (
+          <div className="flex items-center gap-2 text-green-600 justify-center py-4">
+            <CheckCircle2 className="w-5 h-5" />
+            <span className="font-medium">All districts fully covered — nothing left to plan.</span>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {visibleDays.map((d, idx) => (
+              <div key={d.day} className="flex items-start gap-3 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                <div className="flex-shrink-0 w-16 text-center">
+                  <p className="text-xs text-gray-400">{idx === 0 ? "Today" : `Day ${d.day}`}</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{d.date}</p>
+                </div>
+                <div className="flex-1 flex flex-wrap gap-1.5">
+                  {d.districts.map(district => (
+                    <Badge key={district.name} variant="outline" className="text-xs font-normal">
+                      {district.name} &bull; {district.km.toFixed(1)} km
+                    </Badge>
+                  ))}
+                </div>
+                <div className="flex-shrink-0 text-sm font-semibold text-gray-500">{d.totalKm.toFixed(1)} km</div>
+              </div>
+            ))}
+            {hiddenCount > 0 && (
+              <Button variant="ghost" size="sm" className="w-full" onClick={() => setExpanded(true)}>
+                Show {hiddenCount} more day{hiddenCount !== 1 ? "s" : ""}
+              </Button>
+            )}
+            {expanded && forecast.length > VISIBLE && (
+              <Button variant="ghost" size="sm" className="w-full" onClick={() => setExpanded(false)}>
+                Show less
+              </Button>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function ZoneDistrictOverview({ data, drivers, cityId, onAssigned, focusDistrictId }: {
   data: Record<string, unknown>;
   drivers: Record<string, unknown>[];
@@ -790,60 +915,25 @@ export function CityPlanning() {
         </Card>
       )}
 
-      {/* Stats Row — District-Based Driver Survey Coverage Planner dashboard cards */}
+      {/* Stats Row — the operational numbers you check every day */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card>
           <CardContent className="pt-6 text-center">
-            <Users className="w-5 h-5 text-blue-600 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">{Number(dashboardCards.totalDrivers ?? drivers.length)}</p>
-            <p className="text-xs text-gray-500">Total Drivers</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6 text-center">
-            <Layers className="w-5 h-5 text-indigo-600 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">{Number(dashboardCards.totalDistricts ?? 0)}</p>
-            <p className="text-xs text-gray-500">Total Districts</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6 text-center">
-            <MapPin className="w-5 h-5 text-purple-600 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">{Number(dashboardCards.totalStreets ?? totalStreets)}</p>
-            <p className="text-xs text-gray-500">Total Streets</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6 text-center">
-            <Route className="w-5 h-5 text-cyan-600 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">{Number(dashboardCards.totalRoadKm ?? 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}</p>
-            <p className="text-xs text-gray-500">Total Road KM</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6 text-center">
-            <Gauge className="w-5 h-5 text-blue-600 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">{Number(dashboardCards.driverDailyKmCapacity ?? 0).toFixed(1)}</p>
-            <p className="text-xs text-gray-500">Driver Daily KM Capacity</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6 text-center">
-            <TrendingUp className="w-5 h-5 text-blue-600 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">{Number(dashboardCards.totalDailyTeamCapacity ?? 0).toFixed(1)}</p>
-            <p className="text-xs text-gray-500">Total Daily Team Capacity</p>
+            <CheckCircle2 className="w-5 h-5 text-green-600 mx-auto mb-2" />
+            <p className="text-2xl font-bold text-green-600">{Number(dashboardCards.coveragePct ?? coveragePct)}%</p>
+            <p className="text-xs text-gray-500">Overall Coverage</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6 text-center">
             <Calendar className="w-5 h-5 text-orange-600 mx-auto mb-2" />
             <p className="text-2xl font-bold text-gray-900 dark:text-white">{Number(dashboardCards.estimatedCompletionDays ?? 0)}</p>
-            <p className="text-xs text-gray-500">Estimated Completion Days</p>
+            <p className="text-xs text-gray-500">Days Left at Current Pace</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6 text-center">
-            <Zap className="w-5 h-5 text-orange-600 mx-auto mb-2" />
+            <Zap className="w-5 h-5 text-blue-600 mx-auto mb-2" />
             <p className="text-2xl font-bold text-gray-900 dark:text-white">{Number(dashboardCards.assignedToday ?? todayAssigned)}</p>
             <p className="text-xs text-gray-500">Assigned Today</p>
           </CardContent>
@@ -857,12 +947,47 @@ export function CityPlanning() {
         </Card>
         <Card>
           <CardContent className="pt-6 text-center">
-            <CheckCircle2 className="w-5 h-5 text-green-600 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-green-600">{Number(dashboardCards.coveragePct ?? coveragePct)}%</p>
-            <p className="text-xs text-gray-500">Coverage</p>
+            <Users className="w-5 h-5 text-purple-600 mx-auto mb-2" />
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{Number(dashboardCards.totalDrivers ?? drivers.length)}</p>
+            <p className="text-xs text-gray-500">Active Drivers</p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Details behind a toggle — km / capacity math, only needed occasionally */}
+      <details className="group">
+        <summary className="cursor-pointer text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 flex items-center gap-1.5 select-none w-fit">
+          <ChevronRight className="w-3.5 h-3.5 transition-transform group-open:rotate-90" />
+          Capacity &amp; road-km details
+        </summary>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+          <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
+            <Layers className="w-4 h-4 text-indigo-600 mx-auto mb-1" />
+            <p className="text-lg font-bold text-gray-900 dark:text-white">{Number(dashboardCards.totalDistricts ?? 0)}</p>
+            <p className="text-xs text-gray-500">Total Districts</p>
+          </div>
+          <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
+            <MapPin className="w-4 h-4 text-purple-600 mx-auto mb-1" />
+            <p className="text-lg font-bold text-gray-900 dark:text-white">{Number(dashboardCards.totalStreets ?? totalStreets)}</p>
+            <p className="text-xs text-gray-500">Total Streets</p>
+          </div>
+          <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
+            <Route className="w-4 h-4 text-cyan-600 mx-auto mb-1" />
+            <p className="text-lg font-bold text-gray-900 dark:text-white">{Number(dashboardCards.totalRoadKm ?? 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}</p>
+            <p className="text-xs text-gray-500">Total Road KM</p>
+          </div>
+          <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
+            <Gauge className="w-4 h-4 text-blue-600 mx-auto mb-1" />
+            <p className="text-lg font-bold text-gray-900 dark:text-white">{Number(dashboardCards.driverDailyKmCapacity ?? 0).toFixed(1)}</p>
+            <p className="text-xs text-gray-500">Driver Daily KM Capacity</p>
+          </div>
+          <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border col-span-2 md:col-span-1">
+            <TrendingUp className="w-4 h-4 text-blue-600 mx-auto mb-1" />
+            <p className="text-lg font-bold text-gray-900 dark:text-white">{Number(dashboardCards.totalDailyTeamCapacity ?? 0).toFixed(1)}</p>
+            <p className="text-xs text-gray-500">Total Daily Team Capacity</p>
+          </div>
+        </div>
+      </details>
 
       {/* Today's Progress */}
       {todayAssigned > 0 && (
@@ -888,6 +1013,13 @@ export function CityPlanning() {
           </CardContent>
         </Card>
       )}
+
+      {/* Remaining Days Plan — projected, read-only forward view */}
+      <RemainingPlanForecast
+        districts={(data.districts as Record<string, unknown>[]) ?? []}
+        dailyCapacityKm={Number(dashboardCards.totalDailyTeamCapacity ?? 0)}
+        today={data.today as string | undefined}
+      />
 
       {/* District Coverage Map */}
       <DistrictCoverageMap

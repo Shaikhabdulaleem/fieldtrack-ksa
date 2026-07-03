@@ -139,25 +139,28 @@ export async function splitDistrictStreetsIntoZoneRows(
   if (!withLength.length) return [];
 
   const groups = splitDistrictIntoZones(withLength, dailyKm);
-  const created: Array<{ id: string; label: string; targetKm: number; streetCount: number }> = [];
+  if (!groups.length) return [];
 
-  for (const group of groups) {
-    const [zone] = await db.insert(surveyZones).values({
-      cityId,
-      districtId,
-      label: group.label,
-      targetKm: group.km.toFixed(2),
-      status: "not_assigned",
-    }).returning({ id: surveyZones.id });
+  const insertedZones = await db.insert(surveyZones).values(groups.map(group => ({
+    cityId,
+    districtId,
+    label: group.label,
+    targetKm: group.km.toFixed(2),
+    status: "not_assigned" as const,
+  }))).returning({ id: surveyZones.id });
 
-    await db.update(streets)
-      .set({ surveyZoneId: zone.id })
-      .where(inArray(streets.id, group.streets.map(s => s.id)));
+  await Promise.all(groups.map((group, i) =>
+    db.update(streets)
+      .set({ surveyZoneId: insertedZones[i].id })
+      .where(inArray(streets.id, group.streets.map(s => s.id)))
+  ));
 
-    created.push({ id: zone.id, label: group.label, targetKm: group.km, streetCount: group.streets.length });
-  }
-
-  return created;
+  return groups.map((group, i) => ({
+    id: insertedZones[i].id,
+    label: group.label,
+    targetKm: group.km,
+    streetCount: group.streets.length,
+  }));
 }
 
 // ── Single-writer sync for survey_zones assignment state ───────────────────────
