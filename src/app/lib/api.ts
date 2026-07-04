@@ -331,6 +331,13 @@ export async function bulkDeleteAssignments(assignmentIds: string[]) {
   });
 }
 
+export async function bulkDeleteStreets(streetIds: string[]) {
+  return request<{ ok: boolean; deleted: number; requested: number }>("/streets/bulk-delete", {
+    method: "POST",
+    body: JSON.stringify({ streetIds }),
+  });
+}
+
 // ── Assignments ─────────────────────────────────────────────────────────────
 export async function getAssignments(params?: Record<string, string>) {
   const qs = params ? "?" + new URLSearchParams(params).toString() : "";

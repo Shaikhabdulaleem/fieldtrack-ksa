@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 // NEW - allow bulk selection of Grey on-hold streets.
 import { Checkbox } from "../ui/checkbox";
 // CHANGED - include the dedicated on-hold bulk reassignment API.
-import { getCities, getCityZones, getZoneDistricts, getDistrictStreets, getUsers, autoPlan, getAssignments, assignDistrict, reassignDistrict, reassignOnHoldStreets, bulkDeleteAssignments } from "../../lib/api";
+import { getCities, getCityZones, getZoneDistricts, getDistrictStreets, getUsers, autoPlan, getAssignments, assignDistrict, reassignDistrict, reassignOnHoldStreets, bulkDeleteAssignments, bulkDeleteStreets } from "../../lib/api";
 import { Save, RefreshCw, MapPin, Zap, ChevronDown, ChevronRight, Loader2, UserCheck, Map as MapIcon, ArrowRightLeft, Trash2 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
@@ -59,12 +59,15 @@ export function AssignmentManager() {
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState<string | null>(null);
   const [activityMap, setActivityMap] = useState<{ districtId: string; districtName: string; assignedDrivers: { driverId: string; driverName: string; count: number }[] } | null>(null);
-  const [statusFilter, setStatusFilter] = useState<"all" | "on_hold">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "on_hold" | "not_assigned">("all");
   const [selectedOnHoldStreetIds, setSelectedOnHoldStreetIds] = useState<Set<string>>(new Set());
   const [bulkDriverId, setBulkDriverId] = useState("");
   const [bulkAssigning, setBulkAssigning] = useState(false);
   const [selectedAssignmentIds, setSelectedAssignmentIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  // NEW - bulk-delete unassigned street records (data cleanup, not assignment removal).
+  const [selectedUnassignedStreetIds, setSelectedUnassignedStreetIds] = useState<Set<string>>(new Set());
+  const [bulkStreetDeleting, setBulkStreetDeleting] = useState(false);
 
   useEffect(() => {
     getCities().then(c => {
@@ -167,6 +170,7 @@ export function AssignmentManager() {
     setSelectedOnHoldStreetIds(new Set());
     setBulkDriverId("");
     setSelectedAssignmentIds(new Set());
+    setSelectedUnassignedStreetIds(new Set());
   }, [selectedCityId]);
 
   const handleAssignDriver = async (districtId: string, driverId: string, district: DistrictData) => {
@@ -241,6 +245,28 @@ export function AssignmentManager() {
     }
   };
 
+  // NEW - permanently remove selected not_assigned street records (e.g. bad/duplicate imports).
+  const handleBulkDeleteStreets = async () => {
+    if (!selectedUnassignedStreetIds.size) return;
+    setBulkStreetDeleting(true);
+    try {
+      const ids = [...selectedUnassignedStreetIds];
+      const CHUNK = 2000;
+      let totalDeleted = 0;
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const result = await bulkDeleteStreets(ids.slice(i, i + CHUNK));
+        totalDeleted += result.deleted;
+      }
+      toast.success(`Deleted ${totalDeleted} street(s)`);
+      setSelectedUnassignedStreetIds(new Set());
+      await loadCityData();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Bulk street delete failed");
+    } finally {
+      setBulkStreetDeleting(false);
+    }
+  };
+
   const toggleZone = (id: string) => {
     setExpandedZones(prev => {
       const next = new Set(prev);
@@ -257,7 +283,7 @@ export function AssignmentManager() {
     });
   };
 
-  // NEW - filter nested city data so On hold only displays no unrelated streets or districts.
+  // NEW - filter nested city data so On hold / Unassigned only display their own streets or districts.
   const visibleZones = statusFilter === "all"
     ? zones
     : zones
@@ -266,13 +292,18 @@ export function AssignmentManager() {
           districts: zone.districts
             .map(district => ({
               ...district,
-              streets: district.streets.filter(street => street.status === "on_hold"),
-              assignments: district.assignments.filter(a => a.status === "on_hold"),
+              streets: district.streets.filter(street => street.status === statusFilter),
+              assignments: district.assignments.filter(a => a.status === statusFilter),
             }))
             .filter(district => district.streets.length > 0),
         }))
         .filter(zone => zone.districts.length > 0);
-  const visibleOnHoldStreetIds = visibleZones.flatMap(zone => zone.districts.flatMap(district => district.streets.map(street => street.id)));
+  const visibleOnHoldStreetIds = statusFilter === "on_hold"
+    ? visibleZones.flatMap(zone => zone.districts.flatMap(district => district.streets.map(street => street.id)))
+    : [];
+  const visibleUnassignedStreetIds = statusFilter === "not_assigned"
+    ? visibleZones.flatMap(zone => zone.districts.flatMap(district => district.streets.map(street => street.id)))
+    : [];
 
   const allAssignmentIds = visibleZones.flatMap(z => z.districts.flatMap(d => d.assignments.map(a => a.id)));
 
@@ -336,9 +367,10 @@ export function AssignmentManager() {
               <Select
                 value={statusFilter}
                 onValueChange={(value) => {
-                  setStatusFilter(value as "all" | "on_hold");
+                  setStatusFilter(value as "all" | "on_hold" | "not_assigned");
                   setSelectedOnHoldStreetIds(new Set());
                   setSelectedAssignmentIds(new Set());
+                  setSelectedUnassignedStreetIds(new Set());
                   setBulkDriverId("");
                 }}
               >
@@ -346,6 +378,7 @@ export function AssignmentManager() {
                 <SelectContent>
                   <SelectItem value="all">All streets</SelectItem>
                   <SelectItem value="on_hold">On hold only</SelectItem>
+                  <SelectItem value="not_assigned">Unassigned only</SelectItem>
                 </SelectContent>
               </Select>
               <Button variant="outline" onClick={handleAutoPlan}>
@@ -394,6 +427,30 @@ export function AssignmentManager() {
               >
                 {bulkAssigning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ArrowRightLeft className="w-4 h-4 mr-2" />}
                 Reassign selected ({selectedOnHoldStreetIds.size})
+              </Button>
+            </div>
+          )}
+          {/* NEW - bulk-delete not_assigned street records (permanent, data cleanup only). */}
+          {statusFilter === "not_assigned" && (
+            <div className="flex flex-wrap items-center gap-3 border-t pt-4">
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={visibleUnassignedStreetIds.length > 0 && selectedUnassignedStreetIds.size === visibleUnassignedStreetIds.length}
+                  onCheckedChange={(checked) => setSelectedUnassignedStreetIds(checked ? new Set(visibleUnassignedStreetIds) : new Set())}
+                />
+                Select all ({visibleUnassignedStreetIds.length})
+              </label>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  if (window.confirm(`Permanently delete ${selectedUnassignedStreetIds.size} street(s)? This cannot be undone.`)) {
+                    void handleBulkDeleteStreets();
+                  }
+                }}
+                disabled={!selectedUnassignedStreetIds.size || bulkStreetDeleting}
+              >
+                {bulkStreetDeleting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                Delete Selected ({selectedUnassignedStreetIds.size})
               </Button>
             </div>
           )}
@@ -598,13 +655,25 @@ export function AssignmentManager() {
                         {district.streets.filter(s => s.status === "not_assigned" || s.status === "on_hold").length > 0 && (
                           <div>
                             <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Streets</h5>
-                            {district.streets.filter(s => statusFilter === "on_hold" ? s.status === "on_hold" : true).map((street) => (
+                            {district.streets
+                              .filter(s => statusFilter === "on_hold" ? s.status === "on_hold" : statusFilter === "not_assigned" ? s.status === "not_assigned" : true)
+                              .map((street) => (
                               <div key={street.id} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800">
                                 <div className="flex items-center gap-2">
                                   {street.status === "on_hold" && (
                                     <Checkbox
                                       checked={selectedOnHoldStreetIds.has(street.id)}
                                       onCheckedChange={(checked) => setSelectedOnHoldStreetIds(prev => {
+                                        const next = new Set(prev);
+                                        checked ? next.add(street.id) : next.delete(street.id);
+                                        return next;
+                                      })}
+                                    />
+                                  )}
+                                  {street.status === "not_assigned" && (
+                                    <Checkbox
+                                      checked={selectedUnassignedStreetIds.has(street.id)}
+                                      onCheckedChange={(checked) => setSelectedUnassignedStreetIds(prev => {
                                         const next = new Set(prev);
                                         checked ? next.add(street.id) : next.delete(street.id);
                                         return next;
@@ -644,7 +713,11 @@ export function AssignmentManager() {
         <Card>
           <CardContent className="pt-6">
             <p className="text-center text-gray-500 py-8">
-              {statusFilter === "on_hold" ? "No on-hold streets found in this city." : "No zones found for this city. Add zones and districts first."}
+              {statusFilter === "on_hold"
+                ? "No on-hold streets found in this city."
+                : statusFilter === "not_assigned"
+                ? "No unassigned streets found in this city."
+                : "No zones found for this city. Add zones and districts first."}
             </p>
           </CardContent>
         </Card>

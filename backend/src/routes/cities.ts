@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db";
 import { cities, zones, districts, streets, users, leads } from "../db/schema";
-import { eq, and, count, sql, desc } from "drizzle-orm";
+import { eq, and, count, sql, desc, inArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { logActivity } from "../services/activity.service";
 import { AppError } from "../middleware/error";
@@ -337,6 +337,27 @@ citiesRouter.delete("/streets/:id", requireAuth, requireRole("super_admin"), asy
     const [street] = await db.delete(streets).where(eq(streets.id, req.params.id)).returning();
     if (!street) throw new AppError(404, "Street not found");
     res.json({ ok: true, deleted: street.id });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/v1/streets/bulk-delete
+// Only removes streets still in "not_assigned" state — anything a driver has
+// touched (assigned/in_progress/completed/skipped/on_hold) is left alone so
+// this can't be used to wipe out real field work.
+citiesRouter.post("/streets/bulk-delete", requireAuth, requireRole("super_admin"), async (req, res, next) => {
+  try {
+    const { streetIds } = z.object({
+      streetIds: z.array(z.string().uuid()).min(1).max(5000),
+    }).parse(req.body);
+
+    const rows = await db
+      .delete(streets)
+      .where(and(inArray(streets.id, streetIds), eq(streets.status, "not_assigned")))
+      .returning({ id: streets.id });
+
+    res.json({ ok: true, deleted: rows.length, requested: streetIds.length });
   } catch (err) {
     next(err);
   }
