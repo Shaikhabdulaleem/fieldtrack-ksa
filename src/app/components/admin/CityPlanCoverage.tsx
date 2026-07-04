@@ -6,6 +6,7 @@ import { Badge } from "../ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import {
   getCityPlanning, updateCity, calculatePlanKm, splitDistrict, autoAssignZones,
 } from "../../lib/api";
@@ -177,6 +178,8 @@ export function CityPlanCoverage() {
   // Date-range filter for the Remaining Days Forecast chart/table — empty means "use the default window".
   const [chartFrom, setChartFrom] = useState("");
   const [chartTo, setChartTo] = useState("");
+  // Which day's district breakdown shows in the detail table below the summary table.
+  const [selectedDetailDate, setSelectedDetailDate] = useState("");
 
   const loadData = async () => {
     if (!id) return;
@@ -304,6 +307,8 @@ export function CityPlanCoverage() {
   const effectiveChartFrom = chartFrom || defaultChartFrom;
   const effectiveChartTo = chartTo || defaultChartTo;
   const filteredTimeline = timeline.filter(r => r.date >= effectiveChartFrom && r.date <= effectiveChartTo);
+  const effectiveDetailDate = selectedDetailDate || filteredTimeline.find(r => r.districts.length > 0)?.date || filteredTimeline[0]?.date;
+  const detailRow = filteredTimeline.find(r => r.date === effectiveDetailDate);
   const chartData = filteredTimeline.map(r => ({
     date: r.date,
     label: `${r.date.slice(5)}`,
@@ -493,7 +498,7 @@ export function CityPlanCoverage() {
                 </ResponsiveContainer>
               </div>
 
-              {/* Per-day detail table */}
+              {/* Per-day summary table — click a row to see its district breakdown below */}
               <div className="border rounded-lg overflow-hidden overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -501,14 +506,21 @@ export function CityPlanCoverage() {
                       <TableHead>Date</TableHead>
                       <TableHead>Day</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Districts Planned</TableHead>
+                      <TableHead className="text-right">Districts</TableHead>
                       <TableHead className="text-right">KM Planned</TableHead>
                       <TableHead className="text-right">Cumulative Coverage</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredTimeline.map(row => (
-                      <TableRow key={row.date} className={row.isToday ? "bg-blue-50/50 dark:bg-blue-950/30" : row.isWeekend ? "bg-gray-50 dark:bg-gray-900/40" : ""}>
+                      <TableRow
+                        key={row.date}
+                        onClick={() => row.districts.length > 0 && setSelectedDetailDate(row.date)}
+                        className={
+                          (row.districts.length > 0 ? "cursor-pointer " : "") +
+                          (row.date === effectiveDetailDate ? "bg-blue-100/70 dark:bg-blue-900/40" : row.isToday ? "bg-blue-50/50 dark:bg-blue-950/30" : row.isWeekend ? "bg-gray-50 dark:bg-gray-900/40" : "")
+                        }
+                      >
                         <TableCell className="font-medium whitespace-nowrap">{row.date}</TableCell>
                         <TableCell className="whitespace-nowrap">{row.weekday}</TableCell>
                         <TableCell>
@@ -520,19 +532,7 @@ export function CityPlanCoverage() {
                             <Badge variant="secondary">Planned</Badge>
                           )}
                         </TableCell>
-                        <TableCell>
-                          {row.districts.length === 0 ? (
-                            <span className="text-gray-400 text-sm">—</span>
-                          ) : (
-                            <div className="flex flex-wrap gap-1">
-                              {row.districts.map(d => (
-                                <Badge key={d.name} variant="outline" className="text-xs font-normal">
-                                  {d.name} &bull; {d.km.toFixed(1)} km
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
-                        </TableCell>
+                        <TableCell className="text-right">{row.districts.length > 0 ? row.districts.length : "—"}</TableCell>
                         <TableCell className="text-right font-medium">{row.km > 0 ? `${row.km.toFixed(1)} km` : "—"}</TableCell>
                         <TableCell className="text-right">{row.cumulativePct.toFixed(1)}%</TableCell>
                       </TableRow>
@@ -540,6 +540,47 @@ export function CityPlanCoverage() {
                   </TableBody>
                 </Table>
               </div>
+
+              {/* District breakdown for the selected day */}
+              {detailRow && (
+                <div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Districts planned on <span className="font-semibold">{detailRow.date}</span> ({detailRow.weekday})
+                    </p>
+                    <Select value={effectiveDetailDate} onValueChange={setSelectedDetailDate}>
+                      <SelectTrigger className="w-48 h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {filteredTimeline.filter(r => r.districts.length > 0).map(r => (
+                          <SelectItem key={r.date} value={r.date}>{r.date} ({r.weekday})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>District</TableHead>
+                          <TableHead className="text-right">KM Planned</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {detailRow.districts.length === 0 ? (
+                          <TableRow><TableCell colSpan={2} className="text-center text-gray-400 py-4">No work planned this day</TableCell></TableRow>
+                        ) : (
+                          [...detailRow.districts].sort((a, b) => b.km - a.km).map(d => (
+                            <TableRow key={d.name}>
+                              <TableCell className="font-medium">{d.name}</TableCell>
+                              <TableCell className="text-right">{d.km.toFixed(1)} km</TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </CardContent>
