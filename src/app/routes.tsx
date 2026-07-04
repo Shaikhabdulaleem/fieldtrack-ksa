@@ -11,6 +11,7 @@ import { LeadDetail } from "./components/admin/LeadDetail";
 import { Reports } from "./components/admin/Reports";
 import { DriversPage } from "./components/admin/DriversPage";
 import { CityPlanning } from "./components/admin/CityPlanning";
+import { CityPlanCoverage } from "./components/admin/CityPlanCoverage";
 import { RoutePlanner } from "./components/admin/RoutePlanner";
 import { QualityControl } from "./components/admin/QualityControl";
 import { ClientPortal } from "./components/admin/ClientPortal";
@@ -81,6 +82,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, Component: AdminDashboard },
       { path: "city/:id", Component: CityPlanning },
+      { path: "city/:id/plan", Component: CityPlanCoverage },
       { path: "city-map", Component: CityMap },
       { path: "drivers", Component: DriversPage },
       { path: "assignments", Component: AssignmentManager },

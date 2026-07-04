@@ -9,16 +9,14 @@ import { Badge } from "../ui/badge";
 import { Progress } from "../ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import {
-  getCityPlanning, getDriverAssignmentHistory, assignDistrict, updateCity,
-  calculatePlanKm, splitDistrict, autoAssignZones, assignSurveyZone, getDistrictSurveyZones,
+  getCityPlanning, getDriverAssignmentHistory, assignDistrict,
+  splitDistrict, autoAssignZones, assignSurveyZone, getDistrictSurveyZones,
 } from "../../lib/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { Input } from "../ui/input";
-import { Label } from "../ui/label";
 import {
   ArrowLeft, Zap, Users, MapPin, TrendingUp, ChevronDown, ChevronRight, Target,
   Phone, CreditCard, Car, CheckCircle2, Clock, XCircle, Loader2, FileText, Calendar, Map as MapIcon,
-  Fuel, Gauge, Route, Layers, Scissors, PlayCircle,
+  Gauge, Route, Layers, PlayCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { SurveyZonePanel } from "./SurveyZonePanel";
@@ -230,131 +228,6 @@ function DistrictCoverageMap({ data, onSplitDistrict, onViewZones, splittingDist
             })}
           </MapContainer>
         </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-type ForecastDay = { day: number; date: string; districts: { name: string; km: number }[]; totalKm: number };
-
-// Projects, on the fly, which districts would be worked each remaining day
-// given today's saved daily team capacity. Nothing here is persisted or
-// actually assigned — real assignments still only happen via "Generate Today".
-function computeRemainingPlanForecast(
-  districts: Record<string, unknown>[],
-  dailyCapacityKm: number,
-  todayStr: string | undefined,
-): ForecastDay[] {
-  const items = districts
-    .map(d => ({
-      nameEn: String(d.district_name_en),
-      remainingKm: d.remaining_road_km !== null && d.remaining_road_km !== undefined ? Number(d.remaining_road_km) : null,
-    }))
-    .filter((d): d is { nameEn: string; remainingKm: number } => d.remainingKm !== null && d.remainingKm > 0.01)
-    .sort((a, b) => b.remainingKm - a.remainingKm);
-
-  if (dailyCapacityKm <= 0.01 || items.length === 0) return [];
-
-  const days: ForecastDay[] = [];
-  const baseDate = todayStr ? new Date(todayStr) : new Date();
-  let dayNum = 1;
-  let capacityLeft = dailyCapacityKm;
-  let currentDayDistricts: { name: string; km: number }[] = [];
-  let currentDayTotal = 0;
-
-  const pushDay = () => {
-    if (currentDayDistricts.length === 0) return;
-    const d = new Date(baseDate);
-    d.setDate(d.getDate() + (dayNum - 1));
-    days.push({ day: dayNum, date: d.toISOString().slice(0, 10), districts: currentDayDistricts, totalKm: currentDayTotal });
-    dayNum++;
-    capacityLeft = dailyCapacityKm;
-    currentDayDistricts = [];
-    currentDayTotal = 0;
-  };
-
-  const MAX_DAYS = 90;
-  for (const item of items) {
-    let remaining = item.remainingKm;
-    while (remaining > 0.01 && days.length < MAX_DAYS) {
-      if (capacityLeft <= 0.01) pushDay();
-      const take = Math.min(remaining, capacityLeft);
-      const existing = currentDayDistricts.find(x => x.name === item.nameEn);
-      if (existing) existing.km += take;
-      else currentDayDistricts.push({ name: item.nameEn, km: take });
-      currentDayTotal += take;
-      capacityLeft -= take;
-      remaining -= take;
-    }
-    if (days.length >= MAX_DAYS) break;
-  }
-  pushDay();
-  return days;
-}
-
-function RemainingPlanForecast({ districts, dailyCapacityKm, today }: {
-  districts: Record<string, unknown>[];
-  dailyCapacityKm: number;
-  today: string | undefined;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const forecast = computeRemainingPlanForecast(districts, dailyCapacityKm, today);
-  const VISIBLE = 5;
-  const visibleDays = expanded ? forecast : forecast.slice(0, VISIBLE);
-  const hiddenCount = forecast.length - visibleDays.length;
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Calendar className="w-5 h-5" />
-          Remaining Days Plan
-        </CardTitle>
-        <p className="text-xs text-gray-500">
-          Projected schedule based on current daily team capacity ({dailyCapacityKm.toFixed(1)} km/day). Actual driver
-          assignments still happen day by day via "Generate Today".
-        </p>
-      </CardHeader>
-      <CardContent>
-        {dailyCapacityKm <= 0.01 ? (
-          <p className="text-center text-gray-500 py-4 text-sm">
-            No active drivers to project capacity. Add drivers to see the remaining-days plan.
-          </p>
-        ) : forecast.length === 0 ? (
-          <div className="flex items-center gap-2 text-green-600 justify-center py-4">
-            <CheckCircle2 className="w-5 h-5" />
-            <span className="font-medium">All districts fully covered — nothing left to plan.</span>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {visibleDays.map((d, idx) => (
-              <div key={d.day} className="flex items-start gap-3 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
-                <div className="flex-shrink-0 w-16 text-center">
-                  <p className="text-xs text-gray-400">{idx === 0 ? "Today" : `Day ${d.day}`}</p>
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{d.date}</p>
-                </div>
-                <div className="flex-1 flex flex-wrap gap-1.5">
-                  {d.districts.map(district => (
-                    <Badge key={district.name} variant="outline" className="text-xs font-normal">
-                      {district.name} &bull; {district.km.toFixed(1)} km
-                    </Badge>
-                  ))}
-                </div>
-                <div className="flex-shrink-0 text-sm font-semibold text-gray-500">{d.totalKm.toFixed(1)} km</div>
-              </div>
-            ))}
-            {hiddenCount > 0 && (
-              <Button variant="ghost" size="sm" className="w-full" onClick={() => setExpanded(true)}>
-                Show {hiddenCount} more day{hiddenCount !== 1 ? "s" : ""}
-              </Button>
-            )}
-            {expanded && forecast.length > VISIBLE && (
-              <Button variant="ghost" size="sm" className="w-full" onClick={() => setExpanded(false)}>
-                Show less
-              </Button>
-            )}
-          </div>
-        )}
       </CardContent>
     </Card>
   );
@@ -572,17 +445,6 @@ export function CityPlanning() {
   const [driverDetail, setDriverDetail] = useState<Record<string, unknown> | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  // Coverage Planning Calculator state (District-Based Driver Survey Coverage Planner)
-  const [showPlanning, setShowPlanning] = useState(false);
-  const [targetDays, setTargetDays] = useState(30);
-  const [targetLeads, setTargetLeads] = useState(25);
-  const [numberOfDrivers, setNumberOfDrivers] = useState(0);
-  const [petrolPerDriverPerDay, setPetrolPerDriverPerDay] = useState(50);
-  const [petrolPricePerLiter, setPetrolPricePerLiter] = useState(2.18);
-  const [avgCarMileageKmPerLiter, setAvgCarMileageKmPerLiter] = useState(14);
-  const [surveyEfficiencyPct, setSurveyEfficiencyPct] = useState(60);
-  const [planKmResult, setPlanKmResult] = useState<Record<string, unknown> | null>(null);
-  const [calculating, setCalculating] = useState(false);
   const [generatingToday, setGeneratingToday] = useState(false);
   const [splittingDistrictId, setSplittingDistrictId] = useState<string | null>(null);
   const [focusDistrictId, setFocusDistrictId] = useState<string | null>(null);
@@ -592,15 +454,6 @@ export function CityPlanning() {
     try {
       const result = await getCityPlanning(id);
       setData(result);
-      const city = result.city as Record<string, unknown>;
-      const resultDrivers = (result.drivers as Record<string, unknown>[]) ?? [];
-      if (city.targetDays) setTargetDays(Number(city.targetDays));
-      if (city.targetLeadsPerDriver) setTargetLeads(Number(city.targetLeadsPerDriver));
-      if (city.petrolPerDriverPerDay) setPetrolPerDriverPerDay(Number(city.petrolPerDriverPerDay));
-      if (city.petrolPricePerLiter) setPetrolPricePerLiter(Number(city.petrolPricePerLiter));
-      if (city.avgCarMileageKmPerLiter) setAvgCarMileageKmPerLiter(Number(city.avgCarMileageKmPerLiter));
-      if (city.surveyEfficiencyPct) setSurveyEfficiencyPct(Number(city.surveyEfficiencyPct));
-      setNumberOfDrivers(prev => prev || resultDrivers.filter(d => d.is_active).length || 1);
     } catch (err) {
       console.error("Failed to load city planning:", err);
     } finally {
@@ -609,27 +462,6 @@ export function CityPlanning() {
   };
 
   useEffect(() => { loadData(); }, [id]);
-
-  const handleCalculateKm = async () => {
-    if (!id) return;
-    setCalculating(true);
-    try {
-      await updateCity(id, {
-        targetDays, targetLeadsPerDriver: targetLeads,
-        petrolPerDriverPerDay, petrolPricePerLiter, avgCarMileageKmPerLiter, surveyEfficiencyPct,
-      });
-      const result = await calculatePlanKm({
-        cityId: id, targetDays, numberOfDrivers: numberOfDrivers || 1,
-        petrolPerDriverPerDay, petrolPricePerLiter, avgCarMileageKmPerLiter, surveyEfficiencyPct,
-        targetLeadsPerDriver: targetLeads,
-      });
-      setPlanKmResult(result);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Calculation failed");
-    } finally {
-      setCalculating(false);
-    }
-  };
 
   const handleGenerateToday = async () => {
     if (!id) return;
@@ -738,9 +570,9 @@ export function CityPlanning() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setShowPlanning(!showPlanning)}>
+          <Button variant="outline" onClick={() => navigate(`/city/${id}/plan`)}>
             <Target className="w-4 h-4 mr-2" />
-            {showPlanning ? "Close Planner" : "Plan Coverage"}
+            Plan Coverage
           </Button>
           <Button onClick={handleGenerateToday} disabled={generatingToday}>
             {generatingToday ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Zap className="w-4 h-4 mr-2" />}
@@ -748,172 +580,6 @@ export function CityPlanning() {
           </Button>
         </div>
       </div>
-
-      {/* Coverage Planning Calculator */}
-      {showPlanning && (
-        <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/30">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Target className="w-5 h-5 text-blue-600" />
-              Coverage Planning Calculator
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label>Target Days to Complete</Label>
-                <Input type="number" value={targetDays} onChange={e => setTargetDays(Number(e.target.value))} min={1} />
-                <p className="text-xs text-gray-500">Working days to cover all streets</p>
-              </div>
-              <div className="space-y-2">
-                <Label className="flex items-center gap-1"><Users className="w-3.5 h-3.5" /> Number of Available Drivers</Label>
-                <Input type="number" value={numberOfDrivers} onChange={e => setNumberOfDrivers(Number(e.target.value))} min={1} />
-                <p className="text-xs text-gray-500">Drivers available for this plan</p>
-              </div>
-              <div className="space-y-2">
-                <Label>Target Leads per Driver / Day</Label>
-                <Input type="number" value={targetLeads} onChange={e => setTargetLeads(Number(e.target.value))} min={0} />
-                <p className="text-xs text-gray-500">Expected lead conversion rate</p>
-              </div>
-              <div className="space-y-2">
-                <Label className="flex items-center gap-1"><Fuel className="w-3.5 h-3.5" /> Petrol per Driver per Day (SAR)</Label>
-                <Input type="number" value={petrolPerDriverPerDay} onChange={e => setPetrolPerDriverPerDay(Number(e.target.value))} min={0} step={0.5} />
-              </div>
-              <div className="space-y-2">
-                <Label>Petrol Price per Liter (SAR)</Label>
-                <Input type="number" value={petrolPricePerLiter} onChange={e => setPetrolPricePerLiter(Number(e.target.value))} min={0.01} step={0.01} />
-              </div>
-              <div className="space-y-2">
-                <Label className="flex items-center gap-1"><Gauge className="w-3.5 h-3.5" /> Average Car Mileage (km/liter)</Label>
-                <Input type="number" value={avgCarMileageKmPerLiter} onChange={e => setAvgCarMileageKmPerLiter(Number(e.target.value))} min={0} step={0.5} />
-              </div>
-              <div className="space-y-2 md:col-span-3">
-                <Label>Survey Efficiency (%)</Label>
-                <Input type="number" value={surveyEfficiencyPct} onChange={e => setSurveyEfficiencyPct(Number(e.target.value))} min={0} max={100} />
-                <p className="text-xs text-gray-500">Accounts for stops, photos, traffic, U-turns — realistic vs. theoretical driving range</p>
-              </div>
-            </div>
-
-            <Button onClick={handleCalculateKm} disabled={calculating} className="w-full md:w-auto">
-              {calculating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <TrendingUp className="w-4 h-4 mr-2" />}
-              Calculate Feasibility
-            </Button>
-
-            {planKmResult && (
-              <div className="space-y-4">
-                <div className={`p-4 rounded-lg border ${planKmResult.feasible ? 'bg-green-50 dark:bg-green-950 border-green-300 dark:border-green-800' : 'bg-red-50 dark:bg-red-950 border-red-300 dark:border-red-800'}`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    {planKmResult.feasible
-                      ? <CheckCircle2 className="w-5 h-5 text-green-600" />
-                      : <XCircle className="w-5 h-5 text-red-600" />
-                    }
-                    <span className={`font-semibold ${planKmResult.feasible ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
-                      {planKmResult.feasible ? 'Plan is Feasible!' : 'Not Feasible — Need More Drivers'}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Realistic driver capacity: <strong>{Number(planKmResult.realisticDriverDailyKm).toFixed(1)} km/day</strong>
-                    {" "}&bull; Team capacity: <strong>{Number(planKmResult.totalDailyTeamCapacity).toFixed(1)} km/day</strong>
-                    {" "}&bull; Estimated completion: <strong>{Number(planKmResult.estimatedCompletionDays)} days</strong>
-                  </p>
-                  {!planKmResult.feasible && (
-                    <p className="text-sm text-red-600 dark:text-red-400 mt-1">
-                      You need <strong>{Number(planKmResult.shortfall)} more drivers</strong> (total {Number(planKmResult.driversNeeded)}) to complete in {targetDays} days.
-                    </p>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
-                    <p className="text-xs text-gray-500 mb-1">Total Road KM</p>
-                    <p className="text-xl font-bold text-gray-900 dark:text-white">{Number(planKmResult.totalRoadKm).toLocaleString(undefined, { maximumFractionDigits: 1 })}</p>
-                  </div>
-                  <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
-                    <p className="text-xs text-gray-500 mb-1">Remaining Road KM</p>
-                    <p className="text-xl font-bold text-red-600">{Number(planKmResult.remainingRoadKm).toLocaleString(undefined, { maximumFractionDigits: 1 })}</p>
-                  </div>
-                  <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
-                    <p className="text-xs text-gray-500 mb-1">Driver Daily KM Capacity</p>
-                    <p className="text-xl font-bold text-blue-600">{Number(planKmResult.driverDailyKmCapacity).toFixed(1)}</p>
-                  </div>
-                  <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
-                    <p className="text-xs text-gray-500 mb-1">Estimated Completion Days</p>
-                    <p className={`text-xl font-bold ${planKmResult.feasible ? 'text-green-600' : 'text-red-600'}`}>{Number(planKmResult.estimatedCompletionDays)}</p>
-                    <p className="text-xs text-gray-400">of {targetDays} target</p>
-                  </div>
-                  <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
-                    <p className="text-xs text-gray-500 mb-1">Expected Total Leads</p>
-                    <p className="text-xl font-bold text-green-600">{Number(planKmResult.expectedTotalLeads)}</p>
-                  </div>
-                  <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
-                    <p className="text-xs text-gray-500 mb-1">Current Coverage</p>
-                    <p className="text-xl font-bold text-gray-900 dark:text-white">{Number(planKmResult.coveragePct)}%</p>
-                  </div>
-                  <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
-                    <p className="text-xs text-gray-500 mb-1">Total Districts</p>
-                    <p className="text-xl font-bold text-purple-600">{Number(planKmResult.totalDistricts)}</p>
-                  </div>
-                  <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
-                    <p className="text-xs text-gray-500 mb-1">Drivers Needed</p>
-                    <p className={`text-xl font-bold ${Number(planKmResult.shortfall) > 0 ? 'text-red-600' : 'text-green-600'}`}>{Number(planKmResult.driversNeeded)}</p>
-                    {Number(planKmResult.shortfall) > 0 && <p className="text-xs text-red-500">+{Number(planKmResult.shortfall)} more</p>}
-                  </div>
-                </div>
-
-                {/* Per-district road-km breakdown table */}
-                {Array.isArray(planKmResult.districts) && (planKmResult.districts as Record<string, unknown>[]).length > 0 && (
-                  <div className="border rounded-lg overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>District</TableHead>
-                          <TableHead className="text-right">Road KM</TableHead>
-                          <TableHead className="text-right">Driver Capacity/Day</TableHead>
-                          <TableHead className="text-right">Required Driver-Days</TableHead>
-                          <TableHead>Recommendation</TableHead>
-                          <TableHead></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {(planKmResult.districts as Record<string, unknown>[]).map((d) => {
-                          const districtId = String(d.districtId);
-                          const needsSplit = Boolean(d.needsSplit);
-                          return (
-                            <TableRow key={districtId}>
-                              <TableCell className="font-medium">{String(d.nameEn)}</TableCell>
-                              <TableCell className="text-right">{Number(d.roadKm).toFixed(1)} km</TableCell>
-                              <TableCell className="text-right">{Number(planKmResult.driverDailyKmCapacity).toFixed(1)} km</TableCell>
-                              <TableCell className="text-right">{Number(d.requiredDriverDays).toFixed(2)}</TableCell>
-                              <TableCell className="text-sm text-gray-600 dark:text-gray-400">{String(d.recommendation)}</TableCell>
-                              <TableCell>
-                                {needsSplit && (
-                                  <Button
-                                    size="sm" variant="outline"
-                                    disabled={splittingDistrictId === districtId}
-                                    onClick={() => handleSplitDistrict(districtId)}
-                                  >
-                                    <Scissors className="w-3 h-3 mr-1" />
-                                    Split
-                                  </Button>
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-
-                <Button onClick={handleGenerateToday} disabled={generatingToday} className="w-full" size="lg">
-                  {generatingToday ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Zap className="w-5 h-5 mr-2" />}
-                  Generate Today's Assignments ({numberOfDrivers} drivers × {Number(planKmResult.driverDailyKmCapacity).toFixed(1)} km/driver)
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
       {/* Stats Row — the operational numbers you check every day */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -1013,13 +679,6 @@ export function CityPlanning() {
           </CardContent>
         </Card>
       )}
-
-      {/* Remaining Days Plan — projected, read-only forward view */}
-      <RemainingPlanForecast
-        districts={(data.districts as Record<string, unknown>[]) ?? []}
-        dailyCapacityKm={Number(dashboardCards.totalDailyTeamCapacity ?? 0)}
-        today={data.today as string | undefined}
-      />
 
       {/* District Coverage Map */}
       <DistrictCoverageMap
