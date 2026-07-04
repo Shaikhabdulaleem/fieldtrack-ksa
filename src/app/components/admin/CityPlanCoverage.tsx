@@ -14,9 +14,43 @@ import {
   CheckCircle2, XCircle, Calendar, CalendarOff,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
+} from "recharts";
+
+// Sequential single-hue series colors, matched to this app's existing brand
+// usage (blue = planned work, green = coverage) rather than a generic palette.
+const CHART_KM_COLOR = "#2563eb";
+const CHART_COVERAGE_COLOR = "#16a34a";
 
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const FRIDAY = 5;
+
+// Working-day math for the calculator's Start/End Date fields — Friday is the
+// Saudi weekend and never counts as a working day.
+function countWorkingDays(startISO: string, endISO: string): number {
+  const start = new Date(startISO);
+  const end = new Date(endISO);
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) return 0;
+  let count = 0;
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    if (cursor.getDay() !== FRIDAY) count++;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return count;
+}
+
+function addWorkingDays(startISO: string, workingDays: number): string {
+  const cursor = new Date(startISO);
+  if (isNaN(cursor.getTime()) || workingDays <= 1) return startISO;
+  let remaining = workingDays - 1;
+  while (remaining > 0) {
+    cursor.setDate(cursor.getDate() + 1);
+    if (cursor.getDay() !== FRIDAY) remaining--;
+  }
+  return cursor.toISOString().slice(0, 10);
+}
 
 type WorkDayBundle = { districts: { name: string; km: number }[]; totalKm: number };
 type TimelineRow = {
@@ -126,7 +160,10 @@ export function CityPlanCoverage() {
   const [data, setData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [targetDays, setTargetDays] = useState(30);
+  const today = new Date().toISOString().slice(0, 10);
+  const [planStartDate, setPlanStartDate] = useState(today);
+  const [planEndDate, setPlanEndDate] = useState(() => addWorkingDays(today, 30));
+  const targetDays = countWorkingDays(planStartDate, planEndDate);
   const [targetLeads, setTargetLeads] = useState(25);
   const [numberOfDrivers, setNumberOfDrivers] = useState(0);
   const [petrolPerDriverPerDay, setPetrolPerDriverPerDay] = useState(50);
@@ -137,6 +174,9 @@ export function CityPlanCoverage() {
   const [calculating, setCalculating] = useState(false);
   const [generatingToday, setGeneratingToday] = useState(false);
   const [splittingDistrictId, setSplittingDistrictId] = useState<string | null>(null);
+  // Date-range filter for the Remaining Days Forecast chart/table — empty means "use the default window".
+  const [chartFrom, setChartFrom] = useState("");
+  const [chartTo, setChartTo] = useState("");
 
   const loadData = async () => {
     if (!id) return;
@@ -145,7 +185,9 @@ export function CityPlanCoverage() {
       setData(result);
       const city = result.city as Record<string, unknown>;
       const resultDrivers = (result.drivers as Record<string, unknown>[]) ?? [];
-      if (city.targetDays) setTargetDays(Number(city.targetDays));
+      const startISO = String(result.today ?? today);
+      setPlanStartDate(startISO);
+      if (city.targetDays) setPlanEndDate(addWorkingDays(startISO, Number(city.targetDays)));
       if (city.targetLeadsPerDriver) setTargetLeads(Number(city.targetLeadsPerDriver));
       if (city.petrolPerDriverPerDay) setPetrolPerDriverPerDay(Number(city.petrolPerDriverPerDay));
       if (city.petrolPricePerLiter) setPetrolPricePerLiter(Number(city.petrolPricePerLiter));
@@ -257,6 +299,19 @@ export function CityPlanCoverage() {
   const calendarDaysLeft = timeline.length;
   const fridaysInPlan = timeline.filter(r => r.isWeekend).length;
 
+  const defaultChartFrom = timeline[0]?.date;
+  const defaultChartTo = timeline[Math.min(13, timeline.length - 1)]?.date;
+  const effectiveChartFrom = chartFrom || defaultChartFrom;
+  const effectiveChartTo = chartTo || defaultChartTo;
+  const filteredTimeline = timeline.filter(r => r.date >= effectiveChartFrom && r.date <= effectiveChartTo);
+  const chartData = filteredTimeline.map(r => ({
+    date: r.date,
+    label: `${r.date.slice(5)}`,
+    km: r.km,
+    cumulativePct: Math.round(r.cumulativePct * 10) / 10,
+    isToday: r.isToday,
+  }));
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -355,11 +410,11 @@ export function CityPlanCoverage() {
           </CardTitle>
           <p className="text-xs text-gray-500">
             Projected which districts get worked each day at the current team capacity ({dailyCapacityKm.toFixed(1)} km/day).
-            Fridays are shown as a weekend row with no work planned. This is a forward projection for visibility only —
-            it does not pre-assign anything; real driver assignments still happen day by day via "Generate Today".
+            Fridays show as a gap — no work planned. This is a forward projection for visibility only — it does not
+            pre-assign anything; real driver assignments still happen day by day via "Generate Today".
           </p>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-5">
           {dailyCapacityKm <= 0.01 ? (
             <p className="text-center text-gray-500 py-6 text-sm">No active drivers to project capacity.</p>
           ) : timeline.length === 0 ? (
@@ -368,52 +423,124 @@ export function CityPlanCoverage() {
               <span className="font-medium">All districts fully covered — nothing left to plan.</span>
             </div>
           ) : (
-            <div className="border rounded-lg overflow-hidden overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Day</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Districts Planned</TableHead>
-                    <TableHead className="text-right">KM Planned</TableHead>
-                    <TableHead className="text-right">Cumulative Coverage</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {timeline.map(row => (
-                    <TableRow key={row.date} className={row.isToday ? "bg-blue-50/50 dark:bg-blue-950/30" : row.isWeekend ? "bg-gray-50 dark:bg-gray-900/40" : ""}>
-                      <TableCell className="font-medium whitespace-nowrap">{row.date}</TableCell>
-                      <TableCell className="whitespace-nowrap">{row.weekday}</TableCell>
-                      <TableCell>
-                        {row.isToday ? (
-                          <Badge className="bg-blue-600">Today</Badge>
-                        ) : row.isWeekend ? (
-                          <Badge variant="outline" className="text-gray-500">Weekend — No Work Planned</Badge>
-                        ) : (
-                          <Badge variant="secondary">Planned</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {row.districts.length === 0 ? (
-                          <span className="text-gray-400 text-sm">—</span>
-                        ) : (
-                          <div className="flex flex-wrap gap-1">
-                            {row.districts.map(d => (
-                              <Badge key={d.name} variant="outline" className="text-xs font-normal">
-                                {d.name} &bull; {d.km.toFixed(1)} km
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">{row.km > 0 ? `${row.km.toFixed(1)} km` : "—"}</TableCell>
-                      <TableCell className="text-right">{row.cumulativePct.toFixed(1)}%</TableCell>
+            <>
+              {/* Date-range filter */}
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Show from</Label>
+                  <Input
+                    type="date" className="w-40"
+                    value={chartFrom || defaultChartFrom} min={timeline[0]?.date} max={timeline[timeline.length - 1]?.date}
+                    onChange={e => setChartFrom(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Show to</Label>
+                  <Input
+                    type="date" className="w-40"
+                    value={chartTo || defaultChartTo} min={timeline[0]?.date} max={timeline[timeline.length - 1]?.date}
+                    onChange={e => setChartTo(e.target.value)}
+                  />
+                </div>
+                {(chartFrom || chartTo) && (
+                  <Button variant="ghost" size="sm" onClick={() => { setChartFrom(""); setChartTo(""); }}>
+                    Reset
+                  </Button>
+                )}
+                <span className="text-xs text-gray-400">{filteredTimeline.length} of {timeline.length} days shown</span>
+              </div>
+
+              {/* Planned KM per day */}
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-1">Planned KM per Day</p>
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e1e0d9" />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#898781" }} axisLine={{ stroke: "#c3c2b7" }} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: "#898781" }} axisLine={false} tickLine={false} width={40} />
+                    <Tooltip
+                      formatter={(value: number) => [`${value.toFixed(1)} km`, "Planned"]}
+                      labelFormatter={(_label, payload) => payload?.[0]?.payload?.date ?? ""}
+                      contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                    />
+                    <Bar dataKey="km" fill={CHART_KM_COLOR} radius={[4, 4, 0, 0]} maxBarSize={24} />
+                    {chartData.some(d => d.isToday) && (
+                      <ReferenceLine
+                        x={chartData.find(d => d.isToday)?.label}
+                        stroke="#898781" strokeDasharray="4 4"
+                        label={{ value: "Today", position: "top", fontSize: 11, fill: "#898781" }}
+                      />
+                    )}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Cumulative coverage % */}
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-1">Cumulative Coverage %</p>
+                <ResponsiveContainer width="100%" height={180}>
+                  <LineChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e1e0d9" />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#898781" }} axisLine={{ stroke: "#c3c2b7" }} tickLine={false} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: "#898781" }} axisLine={false} tickLine={false} width={40} />
+                    <Tooltip
+                      formatter={(value: number) => [`${value.toFixed(1)}%`, "Cumulative coverage"]}
+                      labelFormatter={(_label, payload) => payload?.[0]?.payload?.date ?? ""}
+                      contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                    />
+                    <Line type="monotone" dataKey="cumulativePct" stroke={CHART_COVERAGE_COLOR} strokeWidth={2} dot={{ r: 3 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Per-day detail table */}
+              <div className="border rounded-lg overflow-hidden overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Day</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Districts Planned</TableHead>
+                      <TableHead className="text-right">KM Planned</TableHead>
+                      <TableHead className="text-right">Cumulative Coverage</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredTimeline.map(row => (
+                      <TableRow key={row.date} className={row.isToday ? "bg-blue-50/50 dark:bg-blue-950/30" : row.isWeekend ? "bg-gray-50 dark:bg-gray-900/40" : ""}>
+                        <TableCell className="font-medium whitespace-nowrap">{row.date}</TableCell>
+                        <TableCell className="whitespace-nowrap">{row.weekday}</TableCell>
+                        <TableCell>
+                          {row.isToday ? (
+                            <Badge className="bg-blue-600">Today</Badge>
+                          ) : row.isWeekend ? (
+                            <Badge variant="outline" className="text-gray-500">Weekend — No Work Planned</Badge>
+                          ) : (
+                            <Badge variant="secondary">Planned</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {row.districts.length === 0 ? (
+                            <span className="text-gray-400 text-sm">—</span>
+                          ) : (
+                            <div className="flex flex-wrap gap-1">
+                              {row.districts.map(d => (
+                                <Badge key={d.name} variant="outline" className="text-xs font-normal">
+                                  {d.name} &bull; {d.km.toFixed(1)} km
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">{row.km > 0 ? `${row.km.toFixed(1)} km` : "—"}</TableCell>
+                        <TableCell className="text-right">{row.cumulativePct.toFixed(1)}%</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -429,9 +556,21 @@ export function CityPlanCoverage() {
         <CardContent className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
+              <Label className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> Start Date</Label>
+              <Input type="date" value={planStartDate} onChange={e => setPlanStartDate(e.target.value)} />
+              <p className="text-xs text-gray-500">When the plan begins</p>
+            </div>
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> End Date</Label>
+              <Input type="date" value={planEndDate} min={planStartDate} onChange={e => setPlanEndDate(e.target.value)} />
+              <p className="text-xs text-gray-500">When the plan should be complete</p>
+            </div>
+            <div className="space-y-2">
               <Label>Target Days to Complete</Label>
-              <Input type="number" value={targetDays} onChange={e => setTargetDays(Number(e.target.value))} min={1} />
-              <p className="text-xs text-gray-500">Working days to cover all streets</p>
+              <div className="flex h-9 items-center rounded-md border border-input bg-gray-50 dark:bg-gray-900 px-3 text-sm font-medium">
+                {targetDays} working day{targetDays !== 1 ? "s" : ""}
+              </div>
+              <p className="text-xs text-gray-500">Auto-calculated from the dates above, Fridays excluded</p>
             </div>
             <div className="space-y-2">
               <Label className="flex items-center gap-1"><Users className="w-3.5 h-3.5" /> Number of Available Drivers</Label>
