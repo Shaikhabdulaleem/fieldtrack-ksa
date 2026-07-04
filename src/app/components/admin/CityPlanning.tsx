@@ -582,7 +582,7 @@ export function CityPlanning() {
       </div>
 
       {/* Stats Row — the operational numbers you check every day */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6 text-center">
             <CheckCircle2 className="w-5 h-5 text-green-600 mx-auto mb-2" />
@@ -618,6 +618,20 @@ export function CityPlanning() {
             <p className="text-xs text-gray-500">Active Drivers</p>
           </CardContent>
         </Card>
+        <Card>
+          <CardContent className="pt-6 text-center">
+            <Layers className="w-5 h-5 text-indigo-600 mx-auto mb-2" />
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{Number(dashboardCards.totalDistricts ?? 0)}</p>
+            <p className="text-xs text-gray-500">Total Districts</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6 text-center">
+            <MapPin className="w-5 h-5 text-purple-600 mx-auto mb-2" />
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{Number(dashboardCards.totalStreets ?? totalStreets)}</p>
+            <p className="text-xs text-gray-500">Total Streets</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Details behind a toggle — km / capacity math, only needed occasionally */}
@@ -626,17 +640,7 @@ export function CityPlanning() {
           <ChevronRight className="w-3.5 h-3.5 transition-transform group-open:rotate-90" />
           Capacity &amp; road-km details
         </summary>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-          <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
-            <Layers className="w-4 h-4 text-indigo-600 mx-auto mb-1" />
-            <p className="text-lg font-bold text-gray-900 dark:text-white">{Number(dashboardCards.totalDistricts ?? 0)}</p>
-            <p className="text-xs text-gray-500">Total Districts</p>
-          </div>
-          <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
-            <MapPin className="w-4 h-4 text-purple-600 mx-auto mb-1" />
-            <p className="text-lg font-bold text-gray-900 dark:text-white">{Number(dashboardCards.totalStreets ?? totalStreets)}</p>
-            <p className="text-xs text-gray-500">Total Streets</p>
-          </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">
           <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
             <Route className="w-4 h-4 text-cyan-600 mx-auto mb-1" />
             <p className="text-lg font-bold text-gray-900 dark:text-white">{Number(dashboardCards.totalRoadKm ?? 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}</p>
