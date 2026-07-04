@@ -340,6 +340,182 @@ export function CityPlanCoverage() {
         </Button>
       </div>
 
+      {/* Coverage Planning Calculator */}
+      <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/30">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Target className="w-5 h-5 text-blue-600" />
+            Coverage Planning Calculator
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> Start Date</Label>
+              <Input type="date" value={planStartDate} onChange={e => setPlanStartDate(e.target.value)} />
+              <p className="text-xs text-gray-500">When the plan begins</p>
+            </div>
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> End Date</Label>
+              <Input type="date" value={planEndDate} min={planStartDate} onChange={e => setPlanEndDate(e.target.value)} />
+              <p className="text-xs text-gray-500">When the plan should be complete</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Target Days to Complete</Label>
+              <div className="flex h-9 items-center rounded-md border border-input bg-gray-50 dark:bg-gray-900 px-3 text-sm font-medium">
+                {targetDays} working day{targetDays !== 1 ? "s" : ""}
+              </div>
+              <p className="text-xs text-gray-500">Auto-calculated from the dates above, Fridays excluded</p>
+            </div>
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1"><Users className="w-3.5 h-3.5" /> Number of Available Drivers</Label>
+              <Input type="number" value={numberOfDrivers} onChange={e => setNumberOfDrivers(Number(e.target.value))} min={1} />
+              <p className="text-xs text-gray-500">Drivers available for this plan</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Target Leads per Driver / Day</Label>
+              <Input type="number" value={targetLeads} onChange={e => setTargetLeads(Number(e.target.value))} min={0} />
+              <p className="text-xs text-gray-500">Expected lead conversion rate</p>
+            </div>
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1"><Fuel className="w-3.5 h-3.5" /> Petrol per Driver per Day (SAR)</Label>
+              <Input type="number" value={petrolPerDriverPerDay} onChange={e => setPetrolPerDriverPerDay(Number(e.target.value))} min={0} step={0.5} />
+            </div>
+            <div className="space-y-2">
+              <Label>Petrol Price per Liter (SAR)</Label>
+              <Input type="number" value={petrolPricePerLiter} onChange={e => setPetrolPricePerLiter(Number(e.target.value))} min={0.01} step={0.01} />
+            </div>
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1"><Gauge className="w-3.5 h-3.5" /> Average Car Mileage (km/liter)</Label>
+              <Input type="number" value={avgCarMileageKmPerLiter} onChange={e => setAvgCarMileageKmPerLiter(Number(e.target.value))} min={0} step={0.5} />
+            </div>
+            <div className="space-y-2 md:col-span-3">
+              <Label>Survey Efficiency (%)</Label>
+              <Input type="number" value={surveyEfficiencyPct} onChange={e => setSurveyEfficiencyPct(Number(e.target.value))} min={0} max={100} />
+              <p className="text-xs text-gray-500">Accounts for stops, photos, traffic, U-turns — realistic vs. theoretical driving range</p>
+            </div>
+          </div>
+
+          <Button onClick={handleCalculateKm} disabled={calculating} className="w-full md:w-auto">
+            {calculating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <TrendingUp className="w-4 h-4 mr-2" />}
+            Calculate Feasibility
+          </Button>
+
+          {planKmResult && (
+            <div className="space-y-4">
+              <div className={`p-4 rounded-lg border ${planKmResult.feasible ? 'bg-green-50 dark:bg-green-950 border-green-300 dark:border-green-800' : 'bg-red-50 dark:bg-red-950 border-red-300 dark:border-red-800'}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  {planKmResult.feasible
+                    ? <CheckCircle2 className="w-5 h-5 text-green-600" />
+                    : <XCircle className="w-5 h-5 text-red-600" />
+                  }
+                  <span className={`font-semibold ${planKmResult.feasible ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
+                    {planKmResult.feasible ? 'Plan is Feasible!' : 'Not Feasible — Need More Drivers'}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Realistic driver capacity: <strong>{Number(planKmResult.realisticDriverDailyKm).toFixed(1)} km/day</strong>
+                  {" "}&bull; Team capacity: <strong>{Number(planKmResult.totalDailyTeamCapacity).toFixed(1)} km/day</strong>
+                  {" "}&bull; Estimated completion: <strong>{Number(planKmResult.estimatedCompletionDays)} days</strong>
+                </p>
+                {!planKmResult.feasible && (
+                  <p className="text-sm text-red-600 dark:text-red-400 mt-1">
+                    You need <strong>{Number(planKmResult.shortfall)} more drivers</strong> (total {Number(planKmResult.driversNeeded)}) to complete in {targetDays} days.
+                  </p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
+                  <p className="text-xs text-gray-500 mb-1">Total Road KM</p>
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{Number(planKmResult.totalRoadKm).toLocaleString(undefined, { maximumFractionDigits: 1 })}</p>
+                </div>
+                <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
+                  <p className="text-xs text-gray-500 mb-1">Remaining Road KM</p>
+                  <p className="text-xl font-bold text-red-600">{Number(planKmResult.remainingRoadKm).toLocaleString(undefined, { maximumFractionDigits: 1 })}</p>
+                </div>
+                <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
+                  <p className="text-xs text-gray-500 mb-1">Driver Daily KM Capacity</p>
+                  <p className="text-xl font-bold text-blue-600">{Number(planKmResult.driverDailyKmCapacity).toFixed(1)}</p>
+                </div>
+                <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
+                  <p className="text-xs text-gray-500 mb-1">Estimated Completion Days</p>
+                  <p className={`text-xl font-bold ${planKmResult.feasible ? 'text-green-600' : 'text-red-600'}`}>{Number(planKmResult.estimatedCompletionDays)}</p>
+                  <p className="text-xs text-gray-400">of {targetDays} target</p>
+                </div>
+                <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
+                  <p className="text-xs text-gray-500 mb-1">Expected Total Leads</p>
+                  <p className="text-xl font-bold text-green-600">{Number(planKmResult.expectedTotalLeads)}</p>
+                </div>
+                <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
+                  <p className="text-xs text-gray-500 mb-1">Current Coverage</p>
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{Number(planKmResult.coveragePct)}%</p>
+                </div>
+                <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
+                  <p className="text-xs text-gray-500 mb-1">Total Districts</p>
+                  <p className="text-xl font-bold text-purple-600">{Number(planKmResult.totalDistricts)}</p>
+                </div>
+                <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
+                  <p className="text-xs text-gray-500 mb-1">Drivers Needed</p>
+                  <p className={`text-xl font-bold ${Number(planKmResult.shortfall) > 0 ? 'text-red-600' : 'text-green-600'}`}>{Number(planKmResult.driversNeeded)}</p>
+                  {Number(planKmResult.shortfall) > 0 && <p className="text-xs text-red-500">+{Number(planKmResult.shortfall)} more</p>}
+                </div>
+              </div>
+
+              {/* Per-district road-km breakdown table */}
+              {Array.isArray(planKmResult.districts) && (planKmResult.districts as Record<string, unknown>[]).length > 0 && (
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>District</TableHead>
+                        <TableHead className="text-right">Road KM</TableHead>
+                        <TableHead className="text-right">Driver Capacity/Day</TableHead>
+                        <TableHead className="text-right">Required Driver-Days</TableHead>
+                        <TableHead>Recommendation</TableHead>
+                        <TableHead></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(planKmResult.districts as Record<string, unknown>[]).map((d) => {
+                        const districtId = String(d.districtId);
+                        const needsSplit = Boolean(d.needsSplit);
+                        return (
+                          <TableRow key={districtId}>
+                            <TableCell className="font-medium">{String(d.nameEn)}</TableCell>
+                            <TableCell className="text-right">{Number(d.roadKm).toFixed(1)} km</TableCell>
+                            <TableCell className="text-right">{Number(planKmResult.driverDailyKmCapacity).toFixed(1)} km</TableCell>
+                            <TableCell className="text-right">{Number(d.requiredDriverDays).toFixed(2)}</TableCell>
+                            <TableCell className="text-sm text-gray-600 dark:text-gray-400">{String(d.recommendation)}</TableCell>
+                            <TableCell>
+                              {needsSplit && (
+                                <Button
+                                  size="sm" variant="outline"
+                                  disabled={splittingDistrictId === districtId}
+                                  onClick={() => handleSplitDistrict(districtId)}
+                                >
+                                  <Scissors className="w-3 h-3 mr-1" />
+                                  Split
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              <Button onClick={handleGenerateToday} disabled={generatingToday} className="w-full" size="lg">
+                {generatingToday ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Zap className="w-5 h-5 mr-2" />}
+                Generate Today's Assignments ({numberOfDrivers} drivers × {Number(planKmResult.driverDailyKmCapacity).toFixed(1)} km/driver)
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Summary stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
@@ -586,181 +762,6 @@ export function CityPlanCoverage() {
         </CardContent>
       </Card>
 
-      {/* Coverage Planning Calculator */}
-      <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/30">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Target className="w-5 h-5 text-blue-600" />
-            Coverage Planning Calculator
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> Start Date</Label>
-              <Input type="date" value={planStartDate} onChange={e => setPlanStartDate(e.target.value)} />
-              <p className="text-xs text-gray-500">When the plan begins</p>
-            </div>
-            <div className="space-y-2">
-              <Label className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> End Date</Label>
-              <Input type="date" value={planEndDate} min={planStartDate} onChange={e => setPlanEndDate(e.target.value)} />
-              <p className="text-xs text-gray-500">When the plan should be complete</p>
-            </div>
-            <div className="space-y-2">
-              <Label>Target Days to Complete</Label>
-              <div className="flex h-9 items-center rounded-md border border-input bg-gray-50 dark:bg-gray-900 px-3 text-sm font-medium">
-                {targetDays} working day{targetDays !== 1 ? "s" : ""}
-              </div>
-              <p className="text-xs text-gray-500">Auto-calculated from the dates above, Fridays excluded</p>
-            </div>
-            <div className="space-y-2">
-              <Label className="flex items-center gap-1"><Users className="w-3.5 h-3.5" /> Number of Available Drivers</Label>
-              <Input type="number" value={numberOfDrivers} onChange={e => setNumberOfDrivers(Number(e.target.value))} min={1} />
-              <p className="text-xs text-gray-500">Drivers available for this plan</p>
-            </div>
-            <div className="space-y-2">
-              <Label>Target Leads per Driver / Day</Label>
-              <Input type="number" value={targetLeads} onChange={e => setTargetLeads(Number(e.target.value))} min={0} />
-              <p className="text-xs text-gray-500">Expected lead conversion rate</p>
-            </div>
-            <div className="space-y-2">
-              <Label className="flex items-center gap-1"><Fuel className="w-3.5 h-3.5" /> Petrol per Driver per Day (SAR)</Label>
-              <Input type="number" value={petrolPerDriverPerDay} onChange={e => setPetrolPerDriverPerDay(Number(e.target.value))} min={0} step={0.5} />
-            </div>
-            <div className="space-y-2">
-              <Label>Petrol Price per Liter (SAR)</Label>
-              <Input type="number" value={petrolPricePerLiter} onChange={e => setPetrolPricePerLiter(Number(e.target.value))} min={0.01} step={0.01} />
-            </div>
-            <div className="space-y-2">
-              <Label className="flex items-center gap-1"><Gauge className="w-3.5 h-3.5" /> Average Car Mileage (km/liter)</Label>
-              <Input type="number" value={avgCarMileageKmPerLiter} onChange={e => setAvgCarMileageKmPerLiter(Number(e.target.value))} min={0} step={0.5} />
-            </div>
-            <div className="space-y-2 md:col-span-3">
-              <Label>Survey Efficiency (%)</Label>
-              <Input type="number" value={surveyEfficiencyPct} onChange={e => setSurveyEfficiencyPct(Number(e.target.value))} min={0} max={100} />
-              <p className="text-xs text-gray-500">Accounts for stops, photos, traffic, U-turns — realistic vs. theoretical driving range</p>
-            </div>
-          </div>
-
-          <Button onClick={handleCalculateKm} disabled={calculating} className="w-full md:w-auto">
-            {calculating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <TrendingUp className="w-4 h-4 mr-2" />}
-            Calculate Feasibility
-          </Button>
-
-          {planKmResult && (
-            <div className="space-y-4">
-              <div className={`p-4 rounded-lg border ${planKmResult.feasible ? 'bg-green-50 dark:bg-green-950 border-green-300 dark:border-green-800' : 'bg-red-50 dark:bg-red-950 border-red-300 dark:border-red-800'}`}>
-                <div className="flex items-center gap-2 mb-2">
-                  {planKmResult.feasible
-                    ? <CheckCircle2 className="w-5 h-5 text-green-600" />
-                    : <XCircle className="w-5 h-5 text-red-600" />
-                  }
-                  <span className={`font-semibold ${planKmResult.feasible ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
-                    {planKmResult.feasible ? 'Plan is Feasible!' : 'Not Feasible — Need More Drivers'}
-                  </span>
-                </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Realistic driver capacity: <strong>{Number(planKmResult.realisticDriverDailyKm).toFixed(1)} km/day</strong>
-                  {" "}&bull; Team capacity: <strong>{Number(planKmResult.totalDailyTeamCapacity).toFixed(1)} km/day</strong>
-                  {" "}&bull; Estimated completion: <strong>{Number(planKmResult.estimatedCompletionDays)} days</strong>
-                </p>
-                {!planKmResult.feasible && (
-                  <p className="text-sm text-red-600 dark:text-red-400 mt-1">
-                    You need <strong>{Number(planKmResult.shortfall)} more drivers</strong> (total {Number(planKmResult.driversNeeded)}) to complete in {targetDays} days.
-                  </p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
-                  <p className="text-xs text-gray-500 mb-1">Total Road KM</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-white">{Number(planKmResult.totalRoadKm).toLocaleString(undefined, { maximumFractionDigits: 1 })}</p>
-                </div>
-                <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
-                  <p className="text-xs text-gray-500 mb-1">Remaining Road KM</p>
-                  <p className="text-xl font-bold text-red-600">{Number(planKmResult.remainingRoadKm).toLocaleString(undefined, { maximumFractionDigits: 1 })}</p>
-                </div>
-                <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
-                  <p className="text-xs text-gray-500 mb-1">Driver Daily KM Capacity</p>
-                  <p className="text-xl font-bold text-blue-600">{Number(planKmResult.driverDailyKmCapacity).toFixed(1)}</p>
-                </div>
-                <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
-                  <p className="text-xs text-gray-500 mb-1">Estimated Completion Days</p>
-                  <p className={`text-xl font-bold ${planKmResult.feasible ? 'text-green-600' : 'text-red-600'}`}>{Number(planKmResult.estimatedCompletionDays)}</p>
-                  <p className="text-xs text-gray-400">of {targetDays} target</p>
-                </div>
-                <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
-                  <p className="text-xs text-gray-500 mb-1">Expected Total Leads</p>
-                  <p className="text-xl font-bold text-green-600">{Number(planKmResult.expectedTotalLeads)}</p>
-                </div>
-                <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
-                  <p className="text-xs text-gray-500 mb-1">Current Coverage</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-white">{Number(planKmResult.coveragePct)}%</p>
-                </div>
-                <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
-                  <p className="text-xs text-gray-500 mb-1">Total Districts</p>
-                  <p className="text-xl font-bold text-purple-600">{Number(planKmResult.totalDistricts)}</p>
-                </div>
-                <div className="bg-white dark:bg-gray-900 rounded-lg p-3 text-center border">
-                  <p className="text-xs text-gray-500 mb-1">Drivers Needed</p>
-                  <p className={`text-xl font-bold ${Number(planKmResult.shortfall) > 0 ? 'text-red-600' : 'text-green-600'}`}>{Number(planKmResult.driversNeeded)}</p>
-                  {Number(planKmResult.shortfall) > 0 && <p className="text-xs text-red-500">+{Number(planKmResult.shortfall)} more</p>}
-                </div>
-              </div>
-
-              {/* Per-district road-km breakdown table */}
-              {Array.isArray(planKmResult.districts) && (planKmResult.districts as Record<string, unknown>[]).length > 0 && (
-                <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>District</TableHead>
-                        <TableHead className="text-right">Road KM</TableHead>
-                        <TableHead className="text-right">Driver Capacity/Day</TableHead>
-                        <TableHead className="text-right">Required Driver-Days</TableHead>
-                        <TableHead>Recommendation</TableHead>
-                        <TableHead></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(planKmResult.districts as Record<string, unknown>[]).map((d) => {
-                        const districtId = String(d.districtId);
-                        const needsSplit = Boolean(d.needsSplit);
-                        return (
-                          <TableRow key={districtId}>
-                            <TableCell className="font-medium">{String(d.nameEn)}</TableCell>
-                            <TableCell className="text-right">{Number(d.roadKm).toFixed(1)} km</TableCell>
-                            <TableCell className="text-right">{Number(planKmResult.driverDailyKmCapacity).toFixed(1)} km</TableCell>
-                            <TableCell className="text-right">{Number(d.requiredDriverDays).toFixed(2)}</TableCell>
-                            <TableCell className="text-sm text-gray-600 dark:text-gray-400">{String(d.recommendation)}</TableCell>
-                            <TableCell>
-                              {needsSplit && (
-                                <Button
-                                  size="sm" variant="outline"
-                                  disabled={splittingDistrictId === districtId}
-                                  onClick={() => handleSplitDistrict(districtId)}
-                                >
-                                  <Scissors className="w-3 h-3 mr-1" />
-                                  Split
-                                </Button>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-
-              <Button onClick={handleGenerateToday} disabled={generatingToday} className="w-full" size="lg">
-                {generatingToday ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Zap className="w-5 h-5 mr-2" />}
-                Generate Today's Assignments ({numberOfDrivers} drivers × {Number(planKmResult.driverDailyKmCapacity).toFixed(1)} km/driver)
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }
